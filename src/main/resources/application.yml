@@ -12,3 +12,6 @@ mybatis:
   type-aliases-package: com.example.askopt.model         # 实体类所在包
   configuration:
     map-underscore-to-camel-case: true                   # 开启驼峰命名自动转换
+
+server:
+  port: 8082

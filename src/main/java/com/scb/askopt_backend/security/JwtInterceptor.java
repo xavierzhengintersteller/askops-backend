@@ -17,13 +17,33 @@ public class JwtInterceptor implements HandlerInterceptor {
 
     @Autowired
     private ObjectMapper objectMapper;
+    private static final String[] SWAGGER_WHITELIST = {
+            "/swagger-ui.html",
+            "/swagger-ui/**",
+            "/v3/api-docs",
+            "/v3/api-docs/**",
+            "/swagger-resources",
+            "/swagger-resources/**",
+            "/webjars/**",
+            "/doc.html" // Knife4j
+    };
+
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) throws Exception {
 
         String path = request.getServletPath();
         // 放行登录
         if(path.startsWith("/api/auth/")) return true;
-
+        // 2️⃣ 放行 Swagger / OpenAPI
+        for (String whitePath : SWAGGER_WHITELIST) {
+            if (path.startsWith(whitePath.replace("/**", ""))) {
+                return true;
+            }
+        }
+        // 3️⃣ 放行 OPTIONS（前端跨域必备）
+        if ("OPTIONS".equalsIgnoreCase(request.getMethod())) {
+            return true;
+        }
         String header = request.getHeader("Authorization");
         response.setContentType("application/json;charset=UTF-8"); // 设置响应类型
 
