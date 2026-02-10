@@ -15,3 +15,7 @@ mybatis:
 
 server:
   port: 8082
+hmac:
+  client-id: central-panel
+  clients:
+    central-panel: SUPER_SECRET_KEY_123
