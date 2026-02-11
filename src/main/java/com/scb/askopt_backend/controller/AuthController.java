@@ -2,14 +2,20 @@ package com.scb.askopt_backend.controller;
 
 import com.scb.askopt_backend.dto.LoginRequest;
 import com.scb.askopt_backend.entity.SysUser;
+import com.scb.askopt_backend.mapper.PermissionMapper;
 import com.scb.askopt_backend.mapper.UserMapper;
+import com.scb.askopt_backend.security.AuthContext;
+import com.scb.askopt_backend.security.AuthUser;
 import com.scb.askopt_backend.security.JwtUtil;
 import com.scb.askopt_backend.vo.ApiResponse;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 @RestController
 @RequestMapping("/api/auth")
@@ -21,18 +27,38 @@ public class AuthController {
     private PasswordEncoder passwordEncoder;
     @Autowired
     private JwtUtil jwtUtil;
+    @Autowired
+    private PermissionMapper permissionMapper;
 
     @PostMapping("/login")
-    public ApiResponse<Map<String,String>> login(@RequestBody LoginRequest request){
+    public ApiResponse<Map<String, Object>> login(@RequestBody LoginRequest request){
 
         SysUser user = userMapper.findByUsername(request.getUsername());
         if(user == null || !passwordEncoder.matches(request.getPassword(), user.getPassword())){
             return ApiResponse.error(401,"用户名或密码错误");
         }
 
+        // 生成 JWT
         String token = jwtUtil.generateToken(user.getUsername());
-        return ApiResponse.success(Map.of("token",token));
+
+        // 加载权限
+        Set<String> permissions = permissionMapper.findCodesByUserId(user.getId());
+
+        // 构建 AuthUser（可以放入上下文或缓存）
+        AuthUser authUser = new AuthUser();
+        authUser.setUserId(user.getId());
+        authUser.setUsername(user.getUsername());
+        authUser.setPermissions(permissions);
+        AuthContext.set(authUser); // 可选，供拦截器读取
+
+        // 返回 token + 权限
+        Map<String,Object> result = new HashMap<>();
+        result.put("token", token);
+        result.put("permissions", permissions);
+
+        return ApiResponse.success(result);
     }
+
     @PostMapping("/register")
     public ApiResponse<Void> register(@RequestBody LoginRequest request) {
 

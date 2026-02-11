@@ -1,6 +1,9 @@
 package com.scb.askopt_backend.security;
 
 
+import com.scb.askopt_backend.entity.SysUser;
+import com.scb.askopt_backend.mapper.PermissionMapper;
+import com.scb.askopt_backend.mapper.UserMapper;
 import com.scb.askopt_backend.vo.ApiResponse;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -8,6 +11,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.HandlerInterceptor;
 import tools.jackson.databind.ObjectMapper;
+
+import java.util.Set;
 
 @Component
 public class JwtInterceptor implements HandlerInterceptor {
@@ -27,6 +32,10 @@ public class JwtInterceptor implements HandlerInterceptor {
             "/webjars/**",
             "/doc.html" // Knife4j
     };
+    @Autowired
+    private PermissionMapper permissionMapper;
+    @Autowired
+    private UserMapper userMapper;
 
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) throws Exception {
@@ -61,6 +70,20 @@ public class JwtInterceptor implements HandlerInterceptor {
             response.getWriter().write(json);
             return false;
         }
+
+        // ⭐ 关键：解析用户名
+        String username = jwtUtil.getUsername(token);
+
+        // ⭐ 加载用户 + 权限
+        SysUser user = userMapper.findByUsername(username);
+        Set<String> permissions = permissionMapper.findCodesByUserId(user.getId());
+
+        AuthUser authUser = new AuthUser();
+        authUser.setUserId(user.getId());
+        authUser.setUsername(username);
+        authUser.setPermissions(permissions);
+
+        AuthContext.set(authUser);
 
         return true;
     }
