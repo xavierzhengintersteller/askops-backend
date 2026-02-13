@@ -12,6 +12,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.HandlerInterceptor;
 import tools.jackson.databind.ObjectMapper;
 
+import java.util.List;
 import java.util.Set;
 
 @Component
@@ -74,8 +75,46 @@ public class JwtInterceptor implements HandlerInterceptor {
         // ⭐ 关键：解析用户名
         String username = jwtUtil.getUsername(token);
 
-        // ⭐ 加载用户 + 权限
+        // ⭐ 加载用户
         SysUser user = userMapper.findByUsername(username);
+        if (user == null) {
+            ApiResponse<Void> apiResponse = ApiResponse.error(401, "invalid user");
+            String json = objectMapper.writeValueAsString(apiResponse);
+            response.getWriter().write(json);
+            return false;
+        }
+
+        // --- RBAC checks start ---
+        // 1) resolve permission code for this request URL + method
+        String permissionCode = permissionMapper.findPermissionCodeByUrlAndMethod(path, request.getMethod());
+        if (permissionCode == null) {
+            // no mapping found -> deny (explicit mapping required)
+            ApiResponse<Void> apiResponse = ApiResponse.error(403, "no permission mapping for this API");
+            String json = objectMapper.writeValueAsString(apiResponse);
+            response.getWriter().write(json);
+            return false;
+        }
+
+        // 2) load user's role codes
+        List<String> roleCodes = userMapper.findRoleCodesByUserId(user.getId());
+        if (roleCodes == null || roleCodes.isEmpty()) {
+            ApiResponse<Void> apiResponse = ApiResponse.error(403, "no roles assigned");
+            String json = objectMapper.writeValueAsString(apiResponse);
+            response.getWriter().write(json);
+            return false;
+        }
+
+        // 3) check whether any role grants the required permission
+        int cnt = permissionMapper.countRolePermissionByRoleCodesAndPermissionCode(roleCodes, permissionCode);
+        if (cnt <= 0) {
+            ApiResponse<Void> apiResponse = ApiResponse.error(403, "access denied");
+            String json = objectMapper.writeValueAsString(apiResponse);
+            response.getWriter().write(json);
+            return false;
+        }
+        // --- RBAC checks end ---
+
+        // 4) OK: set AuthContext with permissions (and continue)
         Set<String> permissions = permissionMapper.findCodesByUserId(user.getId());
 
         AuthUser authUser = new AuthUser();

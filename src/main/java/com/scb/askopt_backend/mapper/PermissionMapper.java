@@ -14,17 +14,17 @@ public interface PermissionMapper {
     /** 启动时加载所有 URL 权限 */
     @Select("""
         SELECT id, permission_code, url_pattern, http_method, description
-        FROM sys_permission
+        FROM sys_api_permission
     """)
     List<SysPermission> findAllPermissions();
 
-    /** 根据用户 ID 查询拥有的权限编码 */
+    /** 根据用户 ID 查询拥有的权限编码 (via roles) */
     @Select("""
-        SELECT p.permission_code
+        SELECT DISTINCT p.permission_code
         FROM sys_permission p
-        JOIN sys_user_permission up
-          ON p.permission_code = up.permission_code
-        WHERE up.user_id = #{userId}
+        JOIN sys_role_permission rp ON rp.permission_id = p.id
+        JOIN sys_user_role ur ON ur.role_id = rp.role_id
+        WHERE ur.user_id = #{userId}
     """)
     Set<String> findCodesByUserId(Long userId);
 

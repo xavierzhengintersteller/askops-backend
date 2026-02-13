@@ -41,8 +41,11 @@ public class AuthController {
         // 生成 JWT
         String token = jwtUtil.generateToken(user.getUsername());
 
-        // 加载权限
+        // 加载权限（via roles）
         Set<String> permissions = permissionMapper.findCodesByUserId(user.getId());
+
+        // load roles
+        List<String> roles = userMapper.findRoleCodesByUserId(user.getId());
 
         // 构建 AuthUser（可以放入上下文或缓存）
         AuthUser authUser = new AuthUser();
@@ -51,10 +54,11 @@ public class AuthController {
         authUser.setPermissions(permissions);
         AuthContext.set(authUser); // 可选，供拦截器读取
 
-        // 返回 token + 权限
+        // 返回 token + 权限 + 角色
         Map<String,Object> result = new HashMap<>();
         result.put("token", token);
         result.put("permissions", permissions);
+        result.put("roles", roles);
 
         return ApiResponse.success(result);
     }
@@ -81,6 +85,9 @@ public class AuthController {
 
         // 4. 保存
         userMapper.insert(user);
+
+        // 5. assign default role "OTHER" (if exists)
+        userMapper.assignRoleToUserByCode(user.getId(), "OTHER");
 
         return ApiResponse.success();
     }
