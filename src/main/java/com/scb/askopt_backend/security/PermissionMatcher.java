@@ -1,61 +1,57 @@
 package com.scb.askopt_backend.security;
 
-import com.scb.askopt_backend.dto.PermissionRule;
+import com.scb.askopt_backend.entity.SysPermission;
 import com.scb.askopt_backend.mapper.PermissionMapper;
 import jakarta.annotation.PostConstruct;
-import lombok.RequiredArgsConstructor;
-import org.springframework.stereotype.Component;
+import lombok.extern.slf4j.Slf4j;
+import org.mybatis.logging.Logger;
+import org.mybatis.logging.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
 import org.springframework.util.AntPathMatcher;
 
-import java.util.Comparator;
+import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.atomic.AtomicReference;
-
-@Component
-@RequiredArgsConstructor
+@Slf4j
+@Service
 public class PermissionMatcher {
 
-    private final PermissionMapper permissionMapper;
 
-    private final AntPathMatcher matcher = new AntPathMatcher();
+    @Autowired
+    private PermissionMapper permissionMapper;
 
-    // 使用 AtomicReference 支持无锁热更新
-    private final AtomicReference<List<PermissionRule>> ruleRef =
-            new AtomicReference<>();
+    private final List<SysPermission> permissions = new ArrayList<>();
+    private final AntPathMatcher pathMatcher = new AntPathMatcher();
 
     @PostConstruct
-    public void init() {
-        refreshRules();
+    public void loadPermissions() {
+        permissions.clear();
+        List<SysPermission> list = permissionMapper.findAllPermissions();
+
+        // 长度降序排序，精确匹配优先
+        list.sort((a, b) -> b.getUrlPattern().length() - a.getUrlPattern().length());
+
+        permissions.addAll(list);
+
+        log.info("Loaded {} permissions:", permissions.size());
+        for (SysPermission p : permissions) {
+            log.info("  [{}] {} -> {}", p.getHttpMethod(), p.getUrlPattern(), p.getPermissionCode());
+        }
     }
 
     /**
-     * 启动或刷新权限规则
-     */
-    public void refreshRules() {
-        List<PermissionRule> rules = permissionMapper.selectAll();
-
-        // 最长路径优先
-        rules.sort(Comparator.comparingInt(
-                (PermissionRule r) -> r.getPattern().length()
-        ).reversed());
-
-        ruleRef.set(rules);
-    }
-
-    /**
-     * 根据 path + method 匹配所需权限
+     * 匹配 URL + 方法返回 permissionCode
      */
     public String match(String path, String method) {
-
-        for (PermissionRule rule : ruleRef.get()) {
-
-            if (matcher.match(rule.getPattern(), path)
-                    && rule.getMethod().equalsIgnoreCase(method)) {
-
-                return rule.getPermission();
+        for (SysPermission p : permissions) {
+            String httpMethod = p.getHttpMethod();
+            if (httpMethod != null && !"*".equals(httpMethod) && !httpMethod.equalsIgnoreCase(method)) {
+                continue;
+            }
+            if (pathMatcher.match(p.getUrlPattern(), path)) {
+                return p.getPermissionCode();
             }
         }
-
         return null;
     }
 }

@@ -5,6 +5,7 @@ import io.jsonwebtoken.*;
 import io.jsonwebtoken.security.Keys;
 import org.springframework.stereotype.Component;
 
+import java.security.Key;
 import java.util.Date;
 import java.util.List;
 import java.util.Set;
@@ -14,7 +15,7 @@ public class JwtUtil {
 
     private static final String SECRET = "demo-secret-key-demo-secret-key-demo-secret-key-demo-secret-key"; // 256 bit+
     private static final long EXPIRE_MS = 24 * 60 * 60 * 1000; // 1天
-
+    private final Key key = Keys.hmacShaKeyFor(SECRET.getBytes());
     /**
      * 根据 username + roles + permissions 生成 token
      */
@@ -27,6 +28,16 @@ public class JwtUtil {
                 .setExpiration(new Date(System.currentTimeMillis() + EXPIRE_MS))
                 .signWith(Keys.hmacShaKeyFor(SECRET.getBytes()))
                 .compact();
+    }
+    /**
+     * 解析 token，返回 Claims
+     */
+    public Claims parse(String token) throws JwtException {
+        return Jwts.parserBuilder()
+                .setSigningKey(key)
+                .build()
+                .parseClaimsJws(token)
+                .getBody();
     }
 
     public String getUsername(String token) {
