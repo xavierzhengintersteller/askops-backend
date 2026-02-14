@@ -1,7 +1,6 @@
 package com.scb.askopt_backend.service;
 
 import com.scb.askopt_backend.config.RedisUtil;
-import com.scb.askopt_backend.dto.RequestAuthUser;
 import com.scb.askopt_backend.entity.SysUser;
 import com.scb.askopt_backend.mapper.PermissionMapper;
 import com.scb.askopt_backend.mapper.UserMapper;
@@ -60,20 +59,70 @@ public class AuthService {
             permissions.add(rp.getPermissionCode());
         }
 
-        // 4️⃣ 构建 AuthUser
+        // 4️⃣ 构建 AuthUser 对象（不含 token）
         AuthUser authUser = new AuthUser();
         authUser.setUserId(user.getId());
         authUser.setUsername(username);
         authUser.setRoles(new ArrayList<>(roles));
         authUser.setPermissions(permissions);
 
-        // 5️⃣ 生成 token
-        String token = jwtUtil.generateToken(authUser);
-        authUser.setToken(token);
+        // 生成 AccessToken（短期）
+        String accessToken = jwtUtil.generateToken(authUser, 15 * 60_000L); // 15 分钟
 
-        // 6️⃣ Redis 缓存 token -> AuthUser
-        String redisKey = "auth:login:" + username;
-        redisUtil.set(redisKey, authUser, TOKEN_EXPIRE_SECONDS);
+        authUser.setAccessToken(accessToken);
+
+        // 6️⃣ 生成 RefreshToken（长期有效，如 7 天）
+        String refreshToken = UUID.randomUUID().toString();
+        authUser.setRefreshToken(refreshToken);
+
+        // 7️⃣ Redis 缓存 RefreshToken -> username
+        redisUtil.set("refresh:" + refreshToken, username, 7 * 24 * 60 * 60); // 7天
+
+        // 8️⃣ 可选：缓存 AccessToken -> AuthUser（短期）以支持快速验证
+        redisUtil.set("auth:login:" + username, authUser, 15 * 60); // 15分钟
+
         return authUser;
+    }
+    // AccessToken 和 RefreshToken 有效期可以从配置中读取
+    private static final long ACCESS_TOKEN_EXPIRE_MS = 15 * 60_000; // 15分钟
+    private static final long ACCESS_TOKEN_CACHE_SEC = 15 * 60;    // 15分钟
+    private static final long REFRESH_TOKEN_EXPIRE_SEC = 7 * 24 * 60 * 60; // 7天
+
+    public String refreshAccessToken(String refreshToken) {
+        // 1️⃣ 校验 refresh token
+        String username = redisUtil.get("refresh:" + refreshToken).toString();
+        if (username == null) {
+            throw new RuntimeException("refresh token invalid or expired");
+        }
+        // 2️⃣ 查询最新权限信息
+        AuthUser authUser = (AuthUser) redisUtil.get("auth:login:" + username);
+        if (authUser == null) {
+            // 缓存不存在，重新拉取
+            SysUser user = userMapper.findByUsername(username);
+            List<PermissionMapper.RolePermission> rolePerms =
+                    permissionMapper.findRolesAndPermissionsByUserId(user.getId());
+
+            Set<String> roles = new HashSet<>();
+            Set<String> permissions = new HashSet<>();
+            for (PermissionMapper.RolePermission rp : rolePerms) {
+                roles.add(rp.getRoleCode());
+                permissions.add(rp.getPermissionCode());
+            }
+
+            authUser = new AuthUser();
+            authUser.setUserId(user.getId());
+            authUser.setUsername(username);
+            authUser.setRoles(new ArrayList<>(roles));
+            authUser.setPermissions(permissions);
+        }
+
+        // 3️⃣ 生成新的 AccessToken
+        String newAccessToken = jwtUtil.generateToken(authUser, ACCESS_TOKEN_EXPIRE_MS);
+
+        // 4️⃣ 更新缓存
+        authUser.setAccessToken(newAccessToken);
+        redisUtil.set("auth:login:" + username, authUser, ACCESS_TOKEN_CACHE_SEC);
+
+        return newAccessToken;
     }
 }

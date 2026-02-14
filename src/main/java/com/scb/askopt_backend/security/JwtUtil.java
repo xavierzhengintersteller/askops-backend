@@ -1,6 +1,5 @@
 package com.scb.askopt_backend.security;
 
-import com.scb.askopt_backend.dto.RequestAuthUser;
 import io.jsonwebtoken.*;
 import io.jsonwebtoken.security.Keys;
 import org.springframework.stereotype.Component;
@@ -19,16 +18,17 @@ public class JwtUtil {
     /**
      * 根据 username + roles + permissions 生成 token
      */
-    public String generateToken(AuthUser user) {
+    public String generateToken(AuthUser user, long expireMillis) {
         return Jwts.builder()
                 .setSubject(user.getUsername())
                 .claim("roles", user.getRoles())
                 .claim("permissions", user.getPermissions())
                 .setIssuedAt(new Date())
-                .setExpiration(new Date(System.currentTimeMillis() + EXPIRE_MS))
+                .setExpiration(new Date(System.currentTimeMillis() + expireMillis))
                 .signWith(Keys.hmacShaKeyFor(SECRET.getBytes()))
                 .compact();
     }
+
     /**
      * 解析 token，返回 Claims
      */

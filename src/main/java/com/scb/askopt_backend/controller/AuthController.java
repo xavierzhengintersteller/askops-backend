@@ -12,10 +12,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 
 @RestController
 @RequestMapping("/api/auth")
@@ -43,35 +40,13 @@ public class AuthController {
     }
 
 
-
-    @PostMapping("/register")
-    public ApiResponse<Void> register(@RequestBody LoginRequest request) {
-
-        // 1. 参数基础校验
-        if (request.getUsername() == null || request.getPassword() == null) {
-            return ApiResponse.error(400, "用户名或密码不能为空");
+    @PostMapping("/token/refresh")
+    public ApiResponse<String> refreshToken(@RequestParam String refreshToken) {
+        try {
+            String newAccessToken = authService.refreshAccessToken(refreshToken);
+            return ApiResponse.success(newAccessToken);
+        } catch (RuntimeException e) {
+            return ApiResponse.error(401, e.getMessage());
         }
-
-        // 2. 用户是否已存在
-        SysUser existUser = userMapper.findByUsername(request.getUsername());
-        if (existUser != null) {
-            return ApiResponse.error(409, "用户名已存在");
-        }
-
-        // 3. 构建用户对象
-        SysUser user = new SysUser();
-        user.setUsername(request.getUsername());
-        user.setPassword(passwordEncoder.encode(request.getPassword()));
-        user.setEnabled(true);
-
-        // 4. 保存
-        userMapper.insert(user);
-
-        // 5. assign default role "OTHER" (if exists)
-        userMapper.assignRoleToUserByCode(user.getId(), "OTHER");
-
-        return ApiResponse.success();
     }
-
-
 }

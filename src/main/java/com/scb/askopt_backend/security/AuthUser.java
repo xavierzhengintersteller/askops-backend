@@ -10,6 +10,7 @@ public class AuthUser {
     private String username;
     private List<String> roles;
     private Set<String> permissions;
-    private String token;
+    private String accessToken;   // 短期 JWT
+    private String refreshToken;  // 长期刷新 token
 }
 
