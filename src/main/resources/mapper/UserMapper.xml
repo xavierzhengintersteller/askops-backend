@@ -25,12 +25,11 @@
     </select>
 
     <!-- new: assign a role to a user by role_code (idempotent insert attempt) -->
-    <insert id="assignRoleToUserByCode" parameterType="map">
-        INSERT INTO sys_user_role (user_id, role_id)
-        VALUES (
-          #{userId},
-          (SELECT id FROM sys_role WHERE role_code = #{roleCode} LIMIT 1)
-        )
+    <insert id="assignRoleToUserByCode">
+        INSERT INTO sys_user_role (user_id, role_code)
+        VALUES (#{userId}, #{roleCode})
+        ON CONFLICT (user_id, role_code) DO NOTHING
     </insert>
+
 
 </mapper>

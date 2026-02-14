@@ -19,4 +19,5 @@ public interface UserMapper {
 
     // new: assign a role to a user by role_code
     int assignRoleToUserByCode(@Param("userId") Long userId, @Param("roleCode") String roleCode);
+
 }

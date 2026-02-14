@@ -1,40 +1,65 @@
 package com.scb.askopt_backend.security;
 
+import com.scb.askopt_backend.dto.RequestAuthUser;
 import io.jsonwebtoken.*;
 import io.jsonwebtoken.security.Keys;
 import org.springframework.stereotype.Component;
 
 import java.util.Date;
+import java.util.List;
+import java.util.Set;
 
 @Component
 public class JwtUtil {
 
     private static final String SECRET = "demo-secret-key-demo-secret-key-demo-secret-key-demo-secret-key"; // 256 bit+
+    private static final long EXPIRE_MS = 24 * 60 * 60 * 1000; // 1天
 
-    public String generateToken(String username){
+    /**
+     * 根据 username + roles + permissions 生成 token
+     */
+    public String generateToken(AuthUser user) {
         return Jwts.builder()
-                .setSubject(username)
+                .setSubject(user.getUsername())
+                .claim("roles", user.getRoles())
+                .claim("permissions", user.getPermissions())
                 .setIssuedAt(new Date())
-                .setExpiration(new Date(System.currentTimeMillis()+24*60*60*1000)) // 1天有效
+                .setExpiration(new Date(System.currentTimeMillis() + EXPIRE_MS))
                 .signWith(Keys.hmacShaKeyFor(SECRET.getBytes()))
                 .compact();
     }
 
-    public String getUsername(String token){
+    public String getUsername(String token) {
+        return parseClaims(token).getSubject();
+    }
+
+    public List<String> getRoles(String token) {
+        Object rolesObj = parseClaims(token).get("roles");
+        if (rolesObj instanceof List) return (List<String>) rolesObj;
+        return null;
+    }
+
+    public Set<String> getPermissions(String token) {
+        Object permsObj = parseClaims(token).get("permissions");
+        if (permsObj instanceof List) return Set.copyOf((List<String>) permsObj);
+        if (permsObj instanceof Set) return (Set<String>) permsObj;
+        return null;
+    }
+
+    public boolean validateToken(String token) {
+        try {
+            parseClaims(token);
+            return true;
+        } catch (JwtException | IllegalArgumentException e) {
+            return false;
+        }
+    }
+
+    private Claims parseClaims(String token) {
         return Jwts.parserBuilder()
                 .setSigningKey(SECRET.getBytes())
                 .build()
                 .parseClaimsJws(token)
-                .getBody()
-                .getSubject();
-    }
-
-    public boolean validateToken(String token){
-        try {
-            Jwts.parserBuilder().setSigningKey(SECRET.getBytes()).build().parseClaimsJws(token);
-            return true;
-        } catch (Exception e){
-            return false;
-        }
+                .getBody();
     }
 }

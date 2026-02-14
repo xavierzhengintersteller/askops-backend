@@ -34,7 +34,7 @@ CREATE TABLE IF NOT EXISTS sys_role_permission (
 
 -- API ↔ Permission mapping. permission_code kept for readability and redundancy;
 -- ensure sys_permission.permission_code is unique so we can reference it if desired.
-CREATE TABLE IF NOT EXISTS sys_api_permission (
+CREATE TABLE IF NOT EXISTS sys_permission (
   id BIGSERIAL PRIMARY KEY,
   url_pattern TEXT NOT NULL,        -- use '*' for wildcard segments, e.g. /api/containers/*/logs
   http_method VARCHAR(10) NOT NULL DEFAULT '*', -- GET, POST, etc. '*' means all methods
@@ -45,7 +45,7 @@ CREATE TABLE IF NOT EXISTS sys_api_permission (
 );
 
 -- Useful index for pattern matching (simple): you will use LIKE/REPLACE matching in queries.
-CREATE INDEX IF NOT EXISTS idx_api_url_pattern ON sys_api_permission(url_pattern);
+CREATE INDEX IF NOT EXISTS idx_api_url_pattern ON sys_permission(url_pattern);
 CREATE INDEX IF NOT EXISTS idx_role_code ON sys_role(role_code);
 CREATE INDEX IF NOT EXISTS idx_permission_code ON sys_permission(permission_code);
 
@@ -73,7 +73,7 @@ ON CONFLICT (permission_code) DO NOTHING;
 
 -- 4) Seed API → permission mappings (idempotent)
 -- Use '*' wildcard in url_pattern to match segments; matching logic in app will convert '*'->'%' and use LIKE.
-INSERT INTO sys_api_permission (url_pattern, http_method, permission_code, description)
+INSERT INTO sys_permission (url_pattern, http_method, permission_code, description)
 VALUES
   ('/api/containers', 'GET', 'container:list:view', 'List containers'),
   ('/api/containers', 'POST', 'container:start:execute', 'Create / start container'),

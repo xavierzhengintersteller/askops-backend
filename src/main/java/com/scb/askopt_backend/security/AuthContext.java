@@ -1,18 +1,34 @@
 package com.scb.askopt_backend.security;
 
+import lombok.experimental.UtilityClass;
+
+/**
+ * 存储当前请求用户信息的工具类（基于 ThreadLocal）
+ */
+@UtilityClass
 public class AuthContext {
 
-    private static final ThreadLocal<AuthUser> CONTEXT = new ThreadLocal<>();
+    // 每个线程独立存储 AuthUser
+    private final ThreadLocal<AuthUser> CONTEXT = new ThreadLocal<>();
 
-    public static void set(AuthUser user) {
-        CONTEXT.set(user);
+    /**
+     * 设置当前线程的用户
+     */
+    public void set(AuthUser authUser) {
+        CONTEXT.set(authUser);
     }
 
-    public static AuthUser get() {
+    /**
+     * 获取当前线程的用户
+     */
+    public AuthUser get() {
         return CONTEXT.get();
     }
 
-    public static void clear() {
+    /**
+     * 清理当前线程的用户信息，避免线程池复用导致数据残留
+     */
+    public void clear() {
         CONTEXT.remove();
     }
 }

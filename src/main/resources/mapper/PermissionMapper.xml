@@ -10,7 +10,7 @@
          prefer most specific (longest) pattern -->
     <select id="findPermissionCodeByUrlAndMethod" resultType="string" parameterType="map">
         SELECT permission_code
-        FROM sys_api_permission
+        FROM sys_permission
         WHERE #{path} LIKE REPLACE(url_pattern, '*', '%')
           AND (http_method = #{method} OR http_method = '*')
         ORDER BY CHAR_LENGTH(url_pattern) DESC
@@ -29,6 +29,21 @@
         </foreach>
           AND p.permission_code = #{permissionCode}
     </select>
+    <!-- Mapper XML: PermissionMapper.xml -->
+    <select id="findCodesByRoleCodes" resultType="java.lang.String" parameterType="java.util.List">
+        SELECT DISTINCT p.permission_code
+        FROM sys_role_permission rp
+        JOIN sys_permission p ON rp.permission_code = p.permission_code
+        <where>
+            <if test="roles != null and roles.size() &gt; 0">
+                rp.role_code IN
+                <foreach collection="roles" item="role" open="(" separator="," close=")">
+                    #{role}
+                </foreach>
+            </if>
+        </where>
+    </select>
+
 
 </mapper>
 
