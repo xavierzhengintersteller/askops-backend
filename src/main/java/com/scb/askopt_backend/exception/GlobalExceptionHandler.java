@@ -32,7 +32,7 @@ public class GlobalExceptionHandler {
     @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
     public ApiResponse<?> handleException(Exception e) {
         e.printStackTrace(); // 生产建议改为日志
-        return ApiResponse.error(500, "系统异常");
+        return ApiResponse.error(500, e.getMessage());
     }
 
 

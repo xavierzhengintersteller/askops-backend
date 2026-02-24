@@ -23,7 +23,8 @@ public class JwtAuthFilter implements Filter {
 
     private static final String[] WHITELIST = {
             "/api/auth/",
-            "/swagger-ui",
+            "/swagger-ui/index.html",
+            "/swagger-ui/",
             "/v3/api-docs"
     };
 

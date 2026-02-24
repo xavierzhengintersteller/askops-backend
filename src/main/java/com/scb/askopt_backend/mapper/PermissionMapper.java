@@ -49,18 +49,7 @@ public interface PermissionMapper {
     class RolePermission {
         private String roleCode;
         private String permissionCode;
-        // getters/setters
     }
 
-    /**List all permission in to memory when server start, and sort by url_pattern length desc for longest match first
-     *
-     * @return
-     */
-    @Select("""
-        SELECT url_pattern AS pattern,
-               http_method AS method,
-               permission_code AS permission
-        FROM sys_permission
-    """)
-    List<PermissionRule> selectAll();
+
 }
