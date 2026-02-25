@@ -38,6 +38,25 @@ public class AuthController {
 
         return ApiResponse.success(user);
     }
+    @PostMapping("/register")
+    public ApiResponse<String> register(@RequestBody LoginRequest request) {
+        SysUser existingUser = userMapper.findByUsername(request.getUsername());
+        if (existingUser != null) {
+            return ApiResponse.error(400, "用户名已存在");
+        }
+        try {
+            // 1️⃣ 创建用户
+            SysUser user = new SysUser();
+            user.setUsername(request.getUsername());
+            user.setPassword(passwordEncoder.encode(request.getPassword()));
+            userMapper.insert(user);
+            // 2️⃣ 返回成功消息
+            return ApiResponse.success("注册成功");
+        } catch (Exception e) {
+            // 3️⃣ 异常处理
+            return ApiResponse.error(500, "注册失败: " + e.getMessage());
+        }
+    }
 
 
     @PostMapping("/token/refresh")
