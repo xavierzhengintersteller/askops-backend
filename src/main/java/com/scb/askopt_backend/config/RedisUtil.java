@@ -42,10 +42,13 @@ public final class RedisUtil {
      * @param key
      * @return
      */
-    public Object get(String key){
-        return (key == null)? null : redisTemplate.opsForValue().get(key);
+    public Object get(String key) {
+        if (key == null) {
+            return null;
+        }
+        // 确保使用 StringRedisSerializer 读取字符串值
+        return redisTemplate.opsForValue().get(key);
     }
-
     /**
      * 指定key的时效时间
      * @param key

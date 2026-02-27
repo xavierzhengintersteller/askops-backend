@@ -27,28 +27,31 @@ public interface PermissionMapper {
                                                         @Param("permissionCode") String permissionCode);
 
     Set<String> findCodesByRoleCodes(List<String> roles);
-
-    /**
-     * 根据用户 ID 查询角色 + 权限
-     * 返回 Map<role_code, Set<permission_code>>
-     */
+    // 1. 查询用户关联的角色ID、权限ID（核心保留）
     @Select("""
-        SELECT r.role_code, p.permission_code
-        FROM sys_user_role ur
-        JOIN sys_role r ON ur.role_code = r.role_code
-        JOIN sys_role_permission rp ON r.role_code = rp.role_code
-        JOIN sys_permission p ON rp.permission_code = p.permission_code
+        SELECT ur.role_id, rp.permission_id 
+        FROM askops_schema.user_role_mapping ur
+        LEFT JOIN askops_schema.role_permission_mapping rp ON ur.role_id = rp.role_id
         WHERE ur.user_id = #{userId}
-    """)
-    @Results({
-            @Result(property = "roleCode", column = "role_code"),
-            @Result(property = "permissionCode", column = "permission_code")
-    })
-    List<RolePermission> findRolesAndPermissionsByUserId(@Param("userId") Long userId);
+        """)
+    List<RolePermissionId> findRoleIdsAndPermissionIdsByUserId(@Param("userId") Long userId);
+
+    // 2. 新增：通过用户ID查询关联的分组ID（用户→角色→分组）
+    @Select("""
+        SELECT DISTINCT rgm.group_id 
+        FROM askops_schema.user_role_mapping ur
+        JOIN askops_schema.role_group_mapping rgm ON ur.role_id = rgm.role_id
+        WHERE ur.user_id = #{userId}
+        """)
+    Set<Long> findGroupIdsByUserId(@Param("userId") Long userId);
+
+    // 3. 查询超级管理员角色ID（如 opsadmin 对应角色）
+    @Select("SELECT id FROM askops_schema.sys_role WHERE role_code = 'admin'")
+    Long getSuperAdminRoleId();
     @Data
-    class RolePermission {
-        private String roleCode;
-        private String permissionCode;
+    class RolePermissionId {
+        private Long roleId;
+        private Long permissionId;
     }
 
 

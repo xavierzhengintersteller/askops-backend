@@ -21,8 +21,8 @@ public class JwtUtil {
     public String generateToken(AuthUser user, long expireMillis) {
         return Jwts.builder()
                 .setSubject(user.getUsername())
-                .claim("roles", user.getRoles())
-                .claim("permissions", user.getPermissions())
+                .claim("roles", user.getRoleIds())
+                .claim("permissions", user.getPermissionIds())
                 .setIssuedAt(new Date())
                 .setExpiration(new Date(System.currentTimeMillis() + expireMillis))
                 .signWith(Keys.hmacShaKeyFor(SECRET.getBytes()))
