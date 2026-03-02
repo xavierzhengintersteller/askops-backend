@@ -14,5 +14,6 @@ public class AuthUser {
     private Set<Long> groupIds;
     private String accessToken;   // 短期 JWT
     private String refreshToken;  // 长期刷新 token
+    private Long permissionVersion;
 }
 

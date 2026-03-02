@@ -4,32 +4,56 @@
         "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 
 <mapper namespace="com.scb.askopt_backend.mapper.UserMapper">
+    <!-- 通用结果映射，匹配实体类和数据库字段 -->
+    <resultMap id="SysUserResultMap" type="com.scb.askopt_backend.entity.SysUser">
+        <id column="id" property="id"/>
+        <result column="username" property="username"/>
+        <result column="password" property="password"/> <!-- 数据库字段"password"带双引号，XML中无需额外处理 -->
+        <result column="enabled" property="enabled"/>
+    </resultMap>
 
     <select id="findByUsername" resultType="com.scb.askopt_backend.entity.SysUser">
-        select id, username, password, enabled
+        select id, username, password, enabled, permission_version
         from sys_user
         where username = #{username}
     </select>
 
+    <select id="findByUserId" resultType="com.scb.askopt_backend.entity.SysUser">
+        select id, username, password, enabled, permission_version
+        from sys_user
+        where id = #{userId}
+    </select>
     <insert id="insert" useGeneratedKeys="true" keyProperty="id">
         insert into sys_user (username, password, enabled)
         values (#{username}, #{password}, #{enabled})
     </insert>
 
-    <!-- new: role codes bound to a user -->
-    <select id="findRoleCodesByUserId" resultType="string" parameterType="long">
-        select r.role_code
-        from sys_role r
-        join sys_user_role ur on ur.role_id = r.id
-        where ur.user_id = #{userId}
+
+    <!-- 根据ID查询用户 -->
+    <select id="selectUserById" resultMap="SysUserResultMap">
+        SELECT id, username, "password", enabled, permission_version
+        FROM askops_schema.sys_user
+        WHERE id = #{userId}
     </select>
 
-    <!-- new: assign a role to a user by role_code (idempotent insert attempt) -->
-    <insert id="assignRoleToUserByCode">
-        INSERT INTO sys_user_role (user_id, role_code)
-        VALUES (#{userId}, #{roleCode})
-        ON CONFLICT (user_id, role_code) DO NOTHING
-    </insert>
+    <!-- 查询所有用户 -->
+    <select id="selectAllUsers" resultMap="SysUserResultMap">
+        SELECT id, username, "password", enabled
+        FROM askops_schema.sys_user
+    </select>
 
+    <!-- 递增权限版本号 -->
+    <update id="incrementPermissionVersion">
+        UPDATE askops_schema.sys_user
+        SET permission_version = permission_version + 1
+        WHERE id = #{userId}
+    </update>
+
+    <!-- 获取权限版本号 -->
+    <select id="getPermissionVersion" resultType="java.lang.Long">
+        SELECT permission_version
+        FROM askops_schema.sys_user
+        WHERE id = #{userId}
+    </select>
 
 </mapper>

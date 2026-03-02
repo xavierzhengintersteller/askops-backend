@@ -1,5 +1,6 @@
 package com.scb.askopt_backend.config;
 
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.data.redis.core.RedisTemplate;
@@ -7,68 +8,79 @@ import org.springframework.stereotype.Component;
 
 import java.util.concurrent.TimeUnit;
 
-@Component  //别忘了注入这个工具类
+@Slf4j
+@Component
 public final class RedisUtil {
 
     @Autowired
     @Qualifier("redisTemplate")
-    private RedisTemplate<String,Object> redisTemplate;
+    private RedisTemplate<String, Object> redisTemplate;
 
     /**
-     * set命令，带过期时间
-     * @param key
-     * @param value
-     * @param time 过期时间（秒）
-     * @return
+     * 设置 key（带过期时间，单位秒）
      */
     public boolean set(String key, Object value, long time) {
         try {
             if (time > 0) {
                 redisTemplate.opsForValue().set(key, value, time, TimeUnit.SECONDS);
             } else {
-                // time <= 0 则表示不过期
                 redisTemplate.opsForValue().set(key, value);
             }
             return true;
         } catch (Exception e) {
-            e.printStackTrace();
+            log.error("Redis set 失败: key={}", key, e);
             return false;
         }
     }
 
-
     /**
-     * get命令
-     * @param key
-     * @return
+     * 获取 key
      */
     public Object get(String key) {
         if (key == null) {
             return null;
         }
-        // 确保使用 StringRedisSerializer 读取字符串值
         return redisTemplate.opsForValue().get(key);
     }
+
     /**
-     * 指定key的时效时间
-     * @param key
-     * @param time
-     * @return
+     * 删除 key
      */
-    public boolean expire(String key, long time){
+    public boolean del(String key) {
         try {
-            if(time > 0){
-                redisTemplate.expire(key,time, TimeUnit.SECONDS);
-            }
-            return true;
+            Boolean result = redisTemplate.delete(key);
+            return Boolean.TRUE.equals(result);
         } catch (Exception e) {
-            e.printStackTrace();
+            log.error("Redis delete 失败: key={}", key, e);
             return false;
         }
     }
 
     /**
-     * 还有其他命令，在RedisUtils工具类里要写30多个勒
+     * 设置过期时间（秒）
      */
+    public boolean expire(String key, long time) {
+        try {
+            if (time > 0) {
+                redisTemplate.expire(key, time, TimeUnit.SECONDS);
+            }
+            return true;
+        } catch (Exception e) {
+            log.error("Redis expire 失败: key={}", key, e);
+            return false;
+        }
+    }
 
+    /**
+     * 判断 key 是否存在
+     */
+    public boolean hasKey(String key) {
+        try {
+            Boolean result = redisTemplate.hasKey(key);
+            return Boolean.TRUE.equals(result);
+        } catch (Exception e) {
+            log.error("Redis hasKey 失败: key={}", key, e);
+            return false;
+        }
+    }
 }

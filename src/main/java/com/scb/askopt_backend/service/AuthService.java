@@ -62,6 +62,7 @@ public class AuthService {
                 permissionMapper.findRoleIdsAndPermissionIdsByUserId(user.getId());
         Set<Long> groupIds = permissionMapper.findGroupIdsByUserId(user.getId());
         Long superAdminRoleId = permissionMapper.getSuperAdminRoleId();
+        Long PermissionVersion = user.getPermissionVersion(); // 从用户表获取权限版本
 
         // 3️⃣ 聚合角色ID、权限ID，判断超级管理员
         Set<Long> roleIds = new HashSet<>();
@@ -81,7 +82,7 @@ public class AuthService {
         }
 
         // 4️⃣ 构建 AuthUser
-        AuthUser authUser = buildAuthUser(user, roleIds, permissionIds, groupIds, superAdmin);
+        AuthUser authUser = buildAuthUser(user, roleIds, permissionIds, groupIds, superAdmin, PermissionVersion);
 
         // 5️⃣ 生成 Token 并缓存
         generateAndCacheTokens(authUser);
@@ -97,24 +98,33 @@ public class AuthService {
         }
 
         String refreshKey = "refresh:" + refreshToken;
-        Object usernameObj = redisUtil.get(refreshKey);
-        if (usernameObj == null) {
+        Object userIdObj = redisUtil.get(refreshKey);
+        if (userIdObj == null) {
             throw new GlobalExceptionHandler.LoginException("refresh token 无效或已过期");
         }
+        Long userId = Long.valueOf(userIdObj.toString());
 
-        String username = usernameObj.toString();
+        // ✅ 删除旧 refreshToken（轮换）
+        redisUtil.del(refreshKey);
 
         // ✅ 每次 refresh 都重新查数据库
-        SysUser user = userMapper.findByUsername(username);
+        SysUser user = userMapper.findByUserId(userId);
         if (user == null) {
             throw new GlobalExceptionHandler.LoginException("用户不存在");
         }
 
+        // 🔥 读取当前 Redis version
+        Object redisVerObj = redisUtil.get("auth:ver:" + userId);
+        if (redisVerObj == null) {
+            throw new GlobalExceptionHandler.LoginException("会话已失效");
+        }
+        Long currentVersion = Long.valueOf(redisVerObj.toString());
+
+        // 🔄 查询最新权限、角色、分组
         List<PermissionMapper.RolePermissionId> rolePermIds =
                 permissionMapper.findRoleIdsAndPermissionIdsByUserId(user.getId());
         Set<Long> groupIds = permissionMapper.findGroupIdsByUserId(user.getId());
         Long superAdminRoleId = permissionMapper.getSuperAdminRoleId();
-
         Set<Long> roleIds = new HashSet<>();
         Set<Long> permissionIds = new HashSet<>();
         boolean superAdmin = false;
@@ -131,19 +141,25 @@ public class AuthService {
             }
         }
 
-        AuthUser authUser = buildAuthUser(user, roleIds, permissionIds, groupIds, superAdmin);
+        AuthUser authUser = buildAuthUser(user, roleIds, permissionIds, groupIds, superAdmin, currentVersion);
 
+        // ✅ 生成新的 AccessToken
         String newAccessToken = jwtUtil.generateToken(authUser, ACCESS_TOKEN_EXPIRE_MS);
         authUser.setAccessToken(newAccessToken);
 
-        redisUtil.set("auth:login:" + username, authUser, ACCESS_TOKEN_CACHE_SEC);
+        // 🔥 更新 Redis 权限缓存 auth:perm:{userId}
+        redisUtil.set("auth:perm:" + userId, permissionIds, REFRESH_TOKEN_EXPIRE_SEC);
+
+        // 🔄 可选：生成新 refreshToken 并缓存（安全轮换）
+        String newRefreshToken = UUID.randomUUID().toString();
+        authUser.setRefreshToken(newRefreshToken);
+        redisUtil.set("refresh:" + newRefreshToken, userId, REFRESH_TOKEN_EXPIRE_SEC);
 
         return newAccessToken;
     }
-
     // ========== 私有工具方法：构建 AuthUser（复用逻辑） ==========
     private AuthUser buildAuthUser(SysUser user, Set<Long> roleIds, Set<Long> permissionIds,
-                                   Set<Long> groupIds, boolean superAdmin) {
+                                   Set<Long> groupIds, boolean superAdmin, Long PermissionVersion) {
         AuthUser authUser = new AuthUser();
         authUser.setUserId(user.getId());
         authUser.setUsername(user.getUsername());
@@ -151,23 +167,31 @@ public class AuthService {
         authUser.setRoleIds(roleIds);
         authUser.setPermissionIds(permissionIds);
         authUser.setGroupIds(groupIds);
+        authUser.setPermissionVersion(user.getPermissionVersion());
         return authUser;
     }
-
-    // ========== 私有工具方法：生成并缓存 Token（复用逻辑） ==========
     private void generateAndCacheTokens(AuthUser authUser) {
-        // 生成 AccessToken
+
         String accessToken = jwtUtil.generateToken(authUser, ACCESS_TOKEN_EXPIRE_MS);
         authUser.setAccessToken(accessToken);
 
-        // 生成 RefreshToken
         String refreshToken = UUID.randomUUID().toString();
         authUser.setRefreshToken(refreshToken);
 
-        // 缓存 RefreshToken（7天）
-        redisUtil.set("refresh:" + refreshToken, authUser.getUsername(), REFRESH_TOKEN_EXPIRE_SEC);
+        Long userId = authUser.getUserId();
 
-        // 缓存 AuthUser（15分钟）
-        redisUtil.set("auth:login:" + authUser.getUsername(), authUser, ACCESS_TOKEN_CACHE_SEC);
+        // 🔥 Redis 存 version
+        redisUtil.set("auth:ver:" + userId,
+                authUser.getPermissionVersion(),
+                REFRESH_TOKEN_EXPIRE_SEC);
+        // 🔥 Redis 存 permissionIds
+        redisUtil.set("auth:perm:" + userId,
+                authUser.getPermissionIds(),
+                REFRESH_TOKEN_EXPIRE_SEC);
+
+        redisUtil.set("refresh:" + refreshToken,
+                userId,
+                REFRESH_TOKEN_EXPIRE_SEC);
     }
+
 }

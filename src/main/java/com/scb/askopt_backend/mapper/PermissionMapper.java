@@ -53,6 +53,11 @@ public interface PermissionMapper {
         private Long roleId;
         private Long permissionId;
     }
-
+    /**
+     * 根据用户ID查询该用户拥有的所有权限ID
+     * @param userId 用户ID
+     * @return 权限ID集合（Set<Long>）
+     */
+    Set<Long> findPermissionIdsByUserId(@Param("userId") Long userId);
 
 }

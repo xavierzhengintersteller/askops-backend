@@ -1,8 +1,10 @@
 package com.scb.askopt_backend.security;
 
+import com.scb.askopt_backend.config.RedisUtil;
 import com.scb.askopt_backend.vo.ApiResponse;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.JwtException;
 import jakarta.servlet.*;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -11,8 +13,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
-import java.util.*;
-import java.util.stream.Collectors;
+import java.util.Collection;
+import java.util.HashSet;
+import java.util.Set;
 
 @Slf4j
 @Component
@@ -20,23 +23,22 @@ import java.util.stream.Collectors;
 public class JwtAuthFilter implements Filter {
 
     private final JwtUtil jwtUtil;
+    private final RedisUtil redisUtil;
     private final PermissionMatcher permissionMatcher;
     private final ObjectMapper objectMapper;
 
     private static final String[] WHITELIST = {
             "/api/auth/",
-            "/api/agent/",
-            "/swagger-ui/index.html",
             "/swagger-ui/",
-            "/v3/api-docs"
+            "/v3/api-docs",
+            "/api/agent/"
     };
 
     @Override
-    public void doFilter(
-            ServletRequest request,
-            ServletResponse response,
-            FilterChain chain
-    ) throws IOException, ServletException {
+    public void doFilter(ServletRequest request,
+                         ServletResponse response,
+                         FilterChain chain)
+            throws IOException, ServletException {
 
         HttpServletRequest req = (HttpServletRequest) request;
         HttpServletResponse resp = (HttpServletResponse) response;
@@ -44,119 +46,152 @@ public class JwtAuthFilter implements Filter {
         String path = req.getServletPath();
         String method = req.getMethod();
 
-        // 白名单放行
-        if (Arrays.stream(WHITELIST).anyMatch(path::startsWith)
-                || "OPTIONS".equalsIgnoreCase(method)) {
+        // 1️⃣ 白名单 + OPTIONS 放行
+        if (isWhitelisted(path) || "OPTIONS".equalsIgnoreCase(method)) {
             chain.doFilter(request, response);
             return;
         }
 
-        // 1️⃣ 校验 JWT Token
-        String header = req.getHeader("Authorization");
-        if (header == null || !header.startsWith("Bearer ")) {
-            writeJson(resp, ApiResponse.error(401, "invalid token"));
-            return;
-        }
-
-        String token = header.substring(7);
-        Claims claims;
         try {
-            claims = jwtUtil.parse(token);
-        } catch (Exception e) {
-            log.error("JWT parse error", e);
-            writeJson(resp, ApiResponse.error(401, "token invalid"));
-            return;
-        }
 
-        // 2️⃣ 解析 JWT 中的权限ID（统一转为 Long 类型，和 AuthUser 对齐）
-        String username = claims.getSubject();
-        // 改用 Set<Long> 存储，和 AuthUser 结构一致（也可用 List<Long>，contains 逻辑相同）
-        Set<Long> permissionIds = parsePermissionIdsFromClaims(claims);
-
-        // 防护：无权限直接拒绝
-        if (permissionIds.isEmpty()) {
-            writeJson(resp, ApiResponse.error(403, "no permissions"));
-            return;
-        }
-
-        // 3️⃣ 匹配当前接口所需的权限ID
-        String requiredPermIdStr = permissionMatcher.match(path, method);
-
-        // 4️⃣ 权限校验逻辑（核心：统一用 Long 类型）
-        if (requiredPermIdStr != null) { // 接口需要权限
-            try {
-                // 关键：转成 Long 类型，和 AuthUser/permissionIds 完全对齐
-                Long requiredPermId = Long.parseLong(requiredPermIdStr);
-                // 类型一致，能正确匹配
-                if (!permissionIds.contains(requiredPermId)) {
-                    writeJson(resp, ApiResponse.error(403,
-                            "access denied: lack permission " + requiredPermId));
-                    return;
-                }
-            } catch (NumberFormatException e) {
-                log.error("Permission ID format error: {}", requiredPermIdStr, e);
-                writeJson(resp, ApiResponse.error(403, "permission format error"));
+            // 2️⃣ 获取 Token
+            String header = req.getHeader("Authorization");
+            if (header == null || !header.startsWith("Bearer ")) {
+                unauthorized(resp, "missing token");
                 return;
             }
-        }
 
-        // 5️⃣ 放行，设置用户上下文（可选：可将 AuthUser 存入上下文）
-        AuthContext.set(username);
-        // 进阶：如果需要将完整 AuthUser 存入上下文，可从 claims 解析更多字段
-        // AuthUser authUser = buildAuthUserFromClaims(claims);
-        // AuthContext.setAuthUser(authUser);
+            String token = header.substring(7);
 
-        try {
-            chain.doFilter(request, response);
-        } finally {
-            AuthContext.clear();
+            // 3️⃣ 解析 JWT（捕获所有异常）
+            Claims claims;
+            try {
+                claims = jwtUtil.parse(token);
+            } catch (JwtException | IllegalArgumentException e) {
+                log.warn("JWT parse failed: {}", e.getMessage());
+                unauthorized(resp, "invalid token");
+                return;
+            }
+
+            Long userId = getLongClaim(claims, "uid");
+            Long tokenVersion = getLongClaim(claims, "ver");
+
+            if (userId == null || tokenVersion == null) {
+                unauthorized(resp, "invalid token payload");
+                return;
+            }
+
+            // 4️⃣ 校验版本号
+            Object redisVerObj = redisUtil.get("auth:ver:" + userId);
+            if (redisVerObj == null) {
+                unauthorized(resp, "session expired");
+                return;
+            }
+
+            Long currentVersion = toLong(redisVerObj);
+            if (!tokenVersion.equals(currentVersion)) {
+                unauthorized(resp, "permission changed");
+                return;
+            }
+
+            // 5️⃣ 读取权限集合
+            Object permObj = redisUtil.get("auth:perm:" + userId);
+            if (permObj == null) {
+                forbidden(resp, "no permissions");
+                return;
+            }
+
+            Set<Long> permissionIds = safeConvertToLongSet(permObj);
+
+            // 6️⃣ 匹配当前接口所需权限
+            String requiredPermIdStr =
+                    permissionMatcher.match(path, method);
+
+            if (requiredPermIdStr != null) {
+                Long requiredPermId;
+                try {
+                    requiredPermId = Long.parseLong(requiredPermIdStr);
+                } catch (NumberFormatException e) {
+                    log.error("Permission format error: {}", requiredPermIdStr);
+                    forbidden(resp, "permission format error");
+                    return;
+                }
+
+                if (!permissionIds.contains(requiredPermId)) {
+                    forbidden(resp,
+                            "access denied: lack permission " + requiredPermId);
+                    return;
+                }
+            }
+
+            // 7️⃣ 写入上下文
+            AuthContext.setUserId(userId);
+
+            try {
+                chain.doFilter(request, response);
+            } finally {
+                AuthContext.clear();
+            }
+
+        } catch (Exception e) {
+            log.error("Unexpected auth filter error", e);
+            resp.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
+            resp.getWriter().write("Internal Server Error");
         }
     }
 
-    /**
-     * 从 JWT Claims 解析权限ID，统一转为 Set<Long>（消除泛型警告 + 类型安全）
-     */
-    private Set<Long> parsePermissionIdsFromClaims(Claims claims) {
+    /* ======================== 工具方法 ======================== */
 
-        Object raw = claims.get("permissions");
-
-        if (!(raw instanceof List<?> rawList)) {
-            return Collections.emptySet();
+    private boolean isWhitelisted(String path) {
+        for (String prefix : WHITELIST) {
+            if (path.startsWith(prefix)) {
+                return true;
+            }
         }
-
-        return rawList.stream()
-                .filter(Objects::nonNull)
-                .map(obj -> {
-                    if (obj instanceof Number n) {
-                        return n.longValue();
-                    }
-                    throw new IllegalArgumentException("Invalid permission type: " + obj);
-                })
-                .collect(Collectors.toSet());
+        return false;
     }
-//    private Set<Long> parsePermissionIdsFromClaims(Claims claims) {
-//        List<Long> permissionIdList = new ArrayList<>();
-//        // 获取原始 List，避免泛型警告
-//        List<?> rawPerms = claims.get("permissionIds", List.class);
-//        if (rawPerms != null) {
-//            for (Object obj : rawPerms) {
-//                if (obj instanceof Number) {
-//                    // 统一转为 Long（兼容 Integer/Long/Short 等数字类型）
-//                    permissionIdList.add(((Number) obj).longValue());
-//                } else {
-//                    log.warn("Invalid permission ID type in JWT: {} (value: {})",
-//                            obj != null ? obj.getClass().getName() : "null", obj);
-//                }
-//            }
-//        }
-//        // 转为 Set，和 AuthUser 结构一致（查询效率更高）
-//        return new HashSet<>(permissionIdList);
-//    }
+
+    private Long getLongClaim(Claims claims, String key) {
+        Object val = claims.get(key);
+        return val == null ? null : toLong(val);
+    }
+
+    private Long toLong(Object obj) {
+        if (obj instanceof Number n) {
+            return n.longValue();
+        }
+        return Long.valueOf(obj.toString());
+    }
+
+    private Set<Long> safeConvertToLongSet(Object obj) {
+        Set<Long> result = new HashSet<>();
+        if (obj instanceof Collection<?> collection) {
+            for (Object item : collection) {
+                if (item instanceof Number n) {
+                    result.add(n.longValue());
+                }
+            }
+        }
+        return result;
+    }
+
+    private void unauthorized(HttpServletResponse resp, String msg)
+            throws IOException {
+        resp.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+        writeJson(resp, ApiResponse.error(401, msg));
+    }
+
+    private void forbidden(HttpServletResponse resp, String msg)
+            throws IOException {
+        resp.setStatus(HttpServletResponse.SC_FORBIDDEN);
+        writeJson(resp, ApiResponse.error(403, msg));
+    }
 
     private void writeJson(HttpServletResponse response,
                            ApiResponse<?> apiResponse)
             throws IOException {
         response.setContentType("application/json;charset=UTF-8");
-        response.getWriter().write(objectMapper.writeValueAsString(apiResponse));
+        response.getWriter()
+                .write(objectMapper.writeValueAsString(apiResponse));
     }
 }

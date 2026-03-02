@@ -43,7 +43,23 @@
             </if>
         </where>
     </select>
-
-
+    <!--
+        findPermissionIdsByUserId方法配置：
+        1. id：和接口方法名完全一致
+        2. parameterType：参数类型（Long），可选（MyBatis可自动识别）
+        3. resultType：返回值类型（Long），因为查询结果是单个列的Long集合
+     -->
+    <select id="findPermissionIdsByUserId"
+            parameterType="java.lang.Long"
+            resultType="java.lang.Long">
+        <!-- 核心SQL：查询用户关联的权限ID -->
+        <!-- 说明：以下是通用的用户-角色-权限关联查询逻辑，需根据你的实际表结构调整 -->
+        SELECT DISTINCT p.id AS permission_id
+        FROM askops_schema.sys_permission p
+        INNER JOIN askops_schema.role_permission_mapping rp ON p.id = rp.permission_id
+        INNER JOIN askops_schema.user_role_mapping ur ON rp.role_id = ur.role_id
+        WHERE ur.user_id = #{userId}
+        <!-- 若你的表结构不同（比如表名、字段名），请替换为实际的关联逻辑 -->
+    </select>
 </mapper>
 

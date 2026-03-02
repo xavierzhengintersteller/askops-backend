@@ -101,11 +101,13 @@ values
     ((select id from askops_schema.sys_role where role_code = 'admin'), (select id from askops_schema.sys_permission where permission_code = 'containers:logs')),
     ((select id from askops_schema.sys_role where role_code = 'admin'), (select id from askops_schema.sys_permission where permission_code = 'containers:write')),
     ((select id from askops_schema.sys_role where role_code = 'admin'), (select id from askops_schema.sys_permission where permission_code = 'containers:restart')),
-    (select id from askops_schema.sys_role where role_code = 'dqsl-dev'), (select id from askops_schema.sys_permission where permission_code = 'containers:read')),
+    ((select id from askops_schema.sys_role where role_code = 'dqsl-dev'), (select id from askops_schema
+    .sys_permission where permission_code = 'containers:read')),
     ((select id from askops_schema.sys_role where role_code = 'dqma-dev'), (select id from askops_schema.sys_permission where permission_code = 'containers:read')),
     ((select id from askops_schema.sys_role where role_code = 'dqsl-leader'), (select id from askops_schema.sys_permission where permission_code = 'containers:read')),
     ((select id from askops_schema.sys_role where role_code = 'dqma-leader'), (select id from askops_schema.sys_permission where permission_code = 'containers:read')),
-    (select id from askops_schema.sys_role where role_code = 'dqsl-dev'), (select id from askops_schema.sys_permission where permission_code = 'containers:logs')),
+    ((select id from askops_schema.sys_role where role_code = 'dqsl-dev'), (select id from askops_schema
+    .sys_permission where permission_code = 'containers:logs')),
     ((select id from askops_schema.sys_role where role_code = 'dqma-dev'), (select id from askops_schema.sys_permission where permission_code = 'containers:logs')),
     ((select id from askops_schema.sys_role where role_code = 'dqsl-leader'), (select id from askops_schema.sys_permission where permission_code = 'containers:logs')),
     ((select id from askops_schema.sys_role where role_code = 'dqma-leader'), (select id from askops_schema.sys_permission where permission_code = 'containers:logs')),
@@ -118,7 +120,8 @@ values
     ((select id from askops_schema.sys_user where username = 'admin'), (select id from askops_schema.sys_role where role_code = 'admin')),
     ((select id from askops_schema.sys_user where username = 'dev1'), (select id from askops_schema.sys_role where
     role_code = 'dqsl-dev')),
-    ((select id from askops_schema.sys_user where username = 'dev1'),  (select id from askops_schema.sys_role where role_code = 'dqma-dev')),
+    ((select id from askops_schema.sys_user where username = 'dev1'),  (select id from askops_schema.sys_role where
+    role_code = 'dqma-dev'));
 --    (8, (select id from askops_schema.sys_role where role_code = 'dqsl-leader')),
 --    (8, (select id from askops_schema.sys_role where role_code = 'dqma-leader'));
 insert into askops_schema.t_group (group_name) values

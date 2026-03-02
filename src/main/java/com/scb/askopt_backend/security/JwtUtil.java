@@ -2,75 +2,72 @@ package com.scb.askopt_backend.security;
 
 import io.jsonwebtoken.*;
 import io.jsonwebtoken.security.Keys;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
+import jakarta.annotation.PostConstruct;
+import java.nio.charset.StandardCharsets;
 import java.security.Key;
 import java.util.Date;
-import java.util.List;
-import java.util.Set;
+import java.util.HashMap;
+import java.util.Map;
 
 @Component
 public class JwtUtil {
 
-    private static final String SECRET = "demo-secret-key-demo-secret-key-demo-secret-key-demo-secret-key"; // 256 bit+
-    private static final long EXPIRE_MS = 24 * 60 * 60 * 1000; // 1天
-    private final Key key = Keys.hmacShaKeyFor(SECRET.getBytes());
+    // ✅ 从配置文件读取
+    @Value("${jwt.secret}")
+    private String secret;
+
+    private Key key;
+
+    // ✅ 统一初始化 Key（只执行一次）
+    @PostConstruct
+    public void init() {
+        this.key = Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
+    }
+
     /**
-     * 根据 username + roles + permissions 生成 token
+     * 生成 JWT（只包含 uid + version）
      */
-    public String generateToken(AuthUser user, long expireMillis) {
+    public String generateToken(AuthUser authUser, long expireMs) {
+
+        Map<String, Object> claims = new HashMap<>();
+        claims.put("uid", authUser.getUserId());
+        claims.put("ver", authUser.getPermissionVersion());
+
         return Jwts.builder()
-                .setSubject(user.getUsername())
-                .claim("roles", user.getRoleIds())
-                .claim("permissions", user.getPermissionIds())
+                .setClaims(claims)
+                .setSubject(String.valueOf(authUser.getUserId()))
                 .setIssuedAt(new Date())
-                .setExpiration(new Date(System.currentTimeMillis() + expireMillis))
-                .signWith(Keys.hmacShaKeyFor(SECRET.getBytes()))
+                .setExpiration(new Date(System.currentTimeMillis() + expireMs))
+                .setIssuer("askopt-backend") // 推荐加 issuer
+                .signWith(key, SignatureAlgorithm.HS256) // ✅ 统一使用 key
                 .compact();
     }
 
     /**
-     * 解析 token，返回 Claims
+     * 解析 JWT
      */
     public Claims parse(String token) throws JwtException {
+
         return Jwts.parserBuilder()
-                .setSigningKey(key)
+                .setSigningKey(key) // ✅ 统一使用同一个 key
+                .requireIssuer("askopt-backend") // 可选增强安全
                 .build()
                 .parseClaimsJws(token)
                 .getBody();
     }
 
-    public String getUsername(String token) {
-        return parseClaims(token).getSubject();
-    }
-
-    public List<String> getRoles(String token) {
-        Object rolesObj = parseClaims(token).get("roles");
-        if (rolesObj instanceof List) return (List<String>) rolesObj;
-        return null;
-    }
-
-    public Set<String> getPermissions(String token) {
-        Object permsObj = parseClaims(token).get("permissions");
-        if (permsObj instanceof List) return Set.copyOf((List<String>) permsObj);
-        if (permsObj instanceof Set) return (Set<String>) permsObj;
-        return null;
-    }
-
+    /**
+     * 简化校验方法
+     */
     public boolean validateToken(String token) {
         try {
-            parseClaims(token);
+            parse(token);
             return true;
         } catch (JwtException | IllegalArgumentException e) {
             return false;
         }
-    }
-
-    private Claims parseClaims(String token) {
-        return Jwts.parserBuilder()
-                .setSigningKey(SECRET.getBytes())
-                .build()
-                .parseClaimsJws(token)
-                .getBody();
     }
 }

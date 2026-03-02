@@ -27,3 +27,5 @@ hmac:
   clients:
     central-panel: SUPER_SECRET_KEY_123
 
+jwt:
+  secret: demo-secret-key-demo-secret-key-demo-secret-key-demo-secret-key

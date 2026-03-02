@@ -7,36 +7,30 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.core.RedisTemplate;
-import org.springframework.data.redis.serializer.GenericJackson2JsonRedisSerializer;
-import org.springframework.data.redis.serializer.Jackson2JsonRedisSerializer;
+import org.springframework.data.redis.serializer.JacksonJsonRedisSerializer;
 import org.springframework.data.redis.serializer.StringRedisSerializer;
 
-/**
- * redis配置
- */
 @Configuration
 public class RedisConfig {
 
     @Bean
-    @SuppressWarnings("all")
-    public RedisTemplate<String,Object> redisTemplate(RedisConnectionFactory factory){
-        RedisTemplate<String,Object> template = new RedisTemplate<>();
-        template.setConnectionFactory(factory);
+    public RedisTemplate<String, Object> redisTemplate(RedisConnectionFactory connectionFactory) {
+        RedisTemplate<String, Object> template = new RedisTemplate<>();
+        template.setConnectionFactory(connectionFactory);
 
-        // 使用 GenericJackson2JsonRedisSerializer 替代
-        GenericJackson2JsonRedisSerializer serializer = new GenericJackson2JsonRedisSerializer();
+        // Use the new JacksonJsonRedisSerializer
+        JacksonJsonRedisSerializer<Object> serializer = new JacksonJsonRedisSerializer<>(Object.class);
 
-        StringRedisSerializer stringRedisSerializer = new StringRedisSerializer();
+//        // Customize the ObjectMapper if needed (using Jackson 3's tools.jackson.databind.ObjectMapper)
+//        ObjectMapper customMapper = new ObjectMapper();
+//        // ... further configuration
+//        serializer.setObjectMapper(customMapper); // Use constructor for configuration in modern Spring Data Redis
 
-        template.setKeySerializer(stringRedisSerializer);
-        template.setHashKeySerializer(stringRedisSerializer);
+        template.setDefaultSerializer(serializer);
+        template.setKeySerializer(new StringRedisSerializer());
         template.setValueSerializer(serializer);
         template.setHashValueSerializer(serializer);
 
-        template.afterPropertiesSet();
         return template;
     }
-
-
 }
-
