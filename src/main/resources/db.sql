@@ -3,6 +3,7 @@ CREATE TABLE askops_schema.sys_user (
 	username varchar(255) NOT NULL,
 	"password" varchar(255) NOT NULL,
 	enabled bool DEFAULT true NULL,
+	permission_version int8 DEFAULT 1 NULL,
 	CONSTRAINT sys_user_pkey PRIMARY KEY (id),
 	CONSTRAINT sys_user_username_key UNIQUE (username)
 );
@@ -18,20 +19,6 @@ CREATE TABLE sys_permission (
 );
 
 
--- 用户权限关联表：存储用户与权限的映射关系 带外键注入
-CREATE TABLE sys_user_permission (
-    user_id INT NOT NULL,
-    permission_code VARCHAR(50) NOT NULL,
-    PRIMARY KEY (user_id, permission_code),
-    CONSTRAINT fk_user
-        FOREIGN KEY (user_id)
-        REFERENCES sys_user(id)
-        ON DELETE CASCADE,
-    CONSTRAINT fk_permission
-        FOREIGN KEY (permission_code)
-        REFERENCES sys_permission(permission_code)
-        ON DELETE CASCADE
-);
 
 CREATE TABLE sys_role (
     id SERIAL PRIMARY KEY,
@@ -41,56 +28,14 @@ CREATE TABLE sys_role (
     CONSTRAINT uk_role_code UNIQUE (role_code)
 );
 
--- 用户角色关联表
-CREATE TABLE sys_user_role (
-    user_id INT NOT NULL,
-    role_code VARCHAR(50) NOT NULL,
-    PRIMARY KEY (user_id, role_code),
-    CONSTRAINT fk_user_role_user
-        FOREIGN KEY (user_id)
-        REFERENCES sys_user(id)
-        ON DELETE CASCADE,
-    CONSTRAINT fk_user_role_role
-        FOREIGN KEY (role_code)
-        REFERENCES sys_role(role_code)
-        ON DELETE CASCADE
-);
-CREATE TABLE sys_role_permission (
-    role_code VARCHAR(50) NOT NULL,
-    permission_code VARCHAR(50) NOT NULL,
-    PRIMARY KEY (role_code, permission_code),
-    CONSTRAINT fk_rp_role
-        FOREIGN KEY (role_code)
-        REFERENCES sys_role(role_code)
-        ON DELETE CASCADE,
-    CONSTRAINT fk_rp_permission
-        FOREIGN KEY (permission_code)
-        REFERENCES sys_permission(permission_code)
-        ON DELETE CASCADE
-);
+
 
 
 INSERT INTO sys_permission (permission_code, url_pattern, http_method, description) VALUES
 ('containers:read',   '/api/containers/**',        'GET',  '查看容器'),
 ('containers:logs',   '/api/containers/**/logs',   'GET',  '查看日志'),
 ('containers:write',  '/api/containers/**',        'POST', '创建/修改容器'),
-('containers:restart','/api/containers/*/restart', 'POST', '重启容器');
-
-UPDATE sys_permission
-SET url_pattern = '/api/containers/restart/**'
-WHERE permission_code = 'containers:restart'
-  AND url_pattern = '/api/containers/*/restart'
-  AND http_method = 'POST'
-  AND description = '重启容器';
-
--- 用户1001拥有所有权限
-INSERT INTO sys_user_permission (user_id, permission_code) VALUES
-(2, 'containers:read'),
-(2, 'containers:logs'),
-(2, 'containers:write');
-INSERT INTO sys_user_permission (user_id, permission_code) VALUES
-(2, 'containers:restart');
-
+('containers:restart','/api/containers/restart/**', 'POST', '重启容器');
 
 
 
@@ -130,8 +75,8 @@ CREATE TABLE role_group_mapping (
 );
 INSERT INTO askops_schema.sys_role (role_code, role_name, is_super_admin)
 VALUES
-('opsadmin', 'opsadmin', TRUE);
-('opsadmin', 'opsadmin', TRUE);
+('admin', 'admin', TRUE);
+
 INSERT INTO askops_schema.sys_role (role_code, role_name)
 VALUES
     ('other', 'other'),
@@ -170,11 +115,12 @@ values
 
 insert into askops_schema.user_role_mapping (user_id, role_id)
 values
-    (2, (select id from askops_schema.sys_role where role_code = 'admin')),
-    (6, (select id from askops_schema.sys_role where role_code = 'dqsl-dev')),
-    (6, (select id from askops_schema.sys_role where role_code = 'dqma-dev')),
-    (8, (select id from askops_schema.sys_role where role_code = 'dqsl-leader')),
-    (8, (select id from askops_schema.sys_role where role_code = 'dqma-leader'));
+    ((select id from askops_schema.sys_user where username = 'admin'), (select id from askops_schema.sys_role where role_code = 'admin')),
+    ((select id from askops_schema.sys_user where username = 'dev1'), (select id from askops_schema.sys_role where
+    role_code = 'dqsl-dev')),
+    ((select id from askops_schema.sys_user where username = 'dev1'),  (select id from askops_schema.sys_role where role_code = 'dqma-dev')),
+--    (8, (select id from askops_schema.sys_role where role_code = 'dqsl-leader')),
+--    (8, (select id from askops_schema.sys_role where role_code = 'dqma-leader'));
 insert into askops_schema.t_group (group_name) values
 ('admin'),
 ('other'),
