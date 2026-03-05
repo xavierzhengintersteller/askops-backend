@@ -24,7 +24,7 @@ CREATE TABLE sys_role (
     id SERIAL PRIMARY KEY,
     role_code VARCHAR(50) NOT NULL,
     role_name VARCHAR(255) NOT NULL,
-    is_super_admin bool NOT NULL DEFAULT FALSE
+    is_super_admin bool NOT NULL DEFAULT FALSE,
     CONSTRAINT uk_role_code UNIQUE (role_code)
 );
 

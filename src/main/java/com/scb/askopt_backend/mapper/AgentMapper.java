@@ -1,7 +1,10 @@
 package com.scb.askopt_backend.mapper;
 
+import com.scb.askopt_backend.dto.AgentIpPortDTO;
 import com.scb.askopt_backend.entity.Agent;
 import org.apache.ibatis.annotations.*;
+
+import java.util.List;
 
 /**
  * Agent 数据访问层（纯 MyBatis 实现）
@@ -41,4 +44,19 @@ public interface AgentMapper {
     @Select("SELECT id, ip, port, group_id, name, status, last_heartbeat_time, create_time, update_time " +
             "FROM t_agent WHERE id = #{id}")
     Agent selectById(@Param("id") Long id);
+
+    /**
+     * find ip,port by userId
+     * @param userId
+     * @return
+     */
+    @Select("""
+            select a.ip, a.port
+            from t_agent a
+            join t_group g on a.group_id = g.id
+            join role_group_mapping rg on rg.group_id = g.id
+            join user_role_mapping ur on ur.role_id = rg.role_id
+            where ur.user_id = #{userId}
+            """)
+    AgentIpPortDTO findAgentsByUserId(Long userId);
 }

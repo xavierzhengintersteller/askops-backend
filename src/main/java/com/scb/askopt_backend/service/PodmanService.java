@@ -1,7 +1,10 @@
 package com.scb.askopt_backend.service;
 
 import com.scb.askopt_backend.config.Hmac.HmacRequestSigner;
+import com.scb.askopt_backend.dto.AgentIpPortDTO;
 import com.scb.askopt_backend.dto.ContainerInfo;
+import com.scb.askopt_backend.mapper.AgentMapper;
+import com.scb.askopt_backend.security.AuthContext;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.*;
 import org.springframework.stereotype.Service;
@@ -19,6 +22,9 @@ public class PodmanService {
 
     @Autowired
     private HmacRequestSigner signer;
+
+    @Autowired
+    private AgentMapper agentMapper;
 
     @Autowired
     private WebClient webClient;
@@ -44,13 +50,20 @@ public class PodmanService {
     private static final String AGENT_URL = "http://172.29.124.186:8080";
 
     public void restart(String containerName) {
+        Long userId = AuthContext.getUserId();
+        AgentIpPortDTO singleAgent = agentMapper.findAgentsByUserId(userId);
+
+        if (singleAgent == null) {
+            throw new RuntimeException("用户没有可用的 agent");
+        }
+        String agentUrl = "http://" + singleAgent.getIp() + ":" + singleAgent.getPort();
         String urlPath = "/containers/" + containerName + "/restart";
         HttpHeaders headers = new HttpHeaders();
         // 可以加签
         signer.sign(HttpMethod.POST, urlPath, "", headers);
 
         HttpEntity<String> entity = new HttpEntity<>("", headers);
-        restTemplate.exchange(AGENT_URL + urlPath, HttpMethod.POST, entity, Void.class);
+        restTemplate.exchange(agentUrl + urlPath, HttpMethod.POST, entity, Void.class);
     }
 
     public String getAllContainer() {
