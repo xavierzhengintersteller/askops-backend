@@ -1,22 +1,17 @@
 package com.scb.askopt_backend.controller;
 
-import com.scb.askopt_backend.dto.AgentIpPortDTO;
-import com.scb.askopt_backend.dto.ContainerInfo;
-import com.scb.askopt_backend.entity.Agent;
-import com.scb.askopt_backend.mapper.AgentMapper;
-import com.scb.askopt_backend.security.AuthContext;
+import com.scb.askopt_backend.dto.*;
+import com.scb.askopt_backend.dto.RestartContainer.BatchRestartContainerRequest;
+import com.scb.askopt_backend.dto.RestartContainer.BatchRestartContainerResponse;
 import com.scb.askopt_backend.service.PodmanService;
 import com.scb.askopt_backend.vo.ApiResponse;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
-import org.springframework.http.ResponseEntity;
 import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.web.bind.annotation.*;
 import reactor.core.publisher.Flux;
 
 import java.util.List;
-import java.util.Map;
 
 @RestController
 @RequestMapping("/api/containers")
@@ -53,21 +48,26 @@ public class PodmanController {
             return ApiResponse.error(500,"获取日志失败: " + e.getMessage());
         }
     }
-    @PostMapping("/restart/{name}")
-    public ApiResponse<String> restartContainer(@PathVariable String name) {
+    @PostMapping("/restart")
+    public ApiResponse<String> restartContainer(@RequestBody RestartContainerRequest request) {
         try {
-            podmanService.restart(name);
-            // 返回标准消息
-            return ApiResponse.success("Container " + name + " restarted");
+            podmanService.restart(request.getContainerId(), request.getNodeIp());
+            return ApiResponse.success(
+                    "Container " + request.getContainerId() + " restarted on node " + request.getNodeIp()
+            );
         } catch (Exception e) {
-            // 异常处理
-            return ApiResponse.error(500, e.getMessage() );
+            return ApiResponse.error(500, e.getMessage());
         }
     }
+    // 批量重启接口
+    @PostMapping("/batch-restart")
+    public BatchRestartContainerResponse batchRestart(@RequestBody BatchRestartContainerRequest request) {
+        return podmanService.batchRestartContainers(request);
+    }
     @GetMapping("containers")
-    public ApiResponse<String> getAllContainer() {
+    public ApiResponse<List<ContainerInfoDTO>> getAllContainer() {
         try {
-            String containers = podmanService.getAllContainer();
+            List<ContainerInfoDTO> containers = podmanService.getAllContainer();
             return ApiResponse.success(containers);
         } catch (Exception e) {
             return ApiResponse.error(500, e.getMessage());

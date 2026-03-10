@@ -58,5 +58,5 @@ public interface AgentMapper {
             join user_role_mapping ur on ur.role_id = rg.role_id
             where ur.user_id = #{userId}
             """)
-    AgentIpPortDTO findAgentsByUserId(Long userId);
+    List<AgentIpPortDTO> findAgentsByUserId(Long userId);
 }
