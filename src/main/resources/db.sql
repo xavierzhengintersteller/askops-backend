@@ -152,6 +152,20 @@ values
     ((select id from askops_schema.sys_role where role_code = 'ssdr-dev'), (select id from askops_schema.t_group where group_name = 'ssdr')),
     ((select id from askops_schema.sys_role where role_code = 'ssdr-leader'), (select id from askops_schema.t_group where group_name = 'ssdr'));
 
+INSERT INTO askops_schema.sys_permission
+( permission_code, url_pattern, http_method, description)
+VALUES( 'containers:batch-restart', '/api/containers/batch-restart', 'POST','批量重启容器');
+
+INSERT INTO askops_schema.role_permission_mapping (role_id, permission_id)
+SELECT
+    1,
+    id
+FROM askops_schema.sys_permission
+WHERE permission_code = 'containers:batch-restart';
+
+
+
+
 ## 当创建一个用户，分配权限过程
 #### 分配获取agent权限
 insert into user_role_mapping (user_id, role_id)
