@@ -1,17 +1,25 @@
 package com.scb.askopt_backend.service;
 
 
-import com.scb.askopt_backend.dto.AgentRegister.AgentHeartbeatRequest;
-import com.scb.askopt_backend.dto.AgentRegister.AgentRegisterRequest;
-import com.scb.askopt_backend.dto.AgentRegister.AgentRegisterResponse;
-import com.scb.askopt_backend.dto.AgentRegister.AgentReportRequest;
+import com.scb.askopt_backend.config.Hmac.HmacRequestSigner;
+import com.scb.askopt_backend.dto.agent.AgentHealthResponse;
+import com.scb.askopt_backend.dto.agent.AgentRegisterRequest;
+import com.scb.askopt_backend.dto.agent.AgentRegisterResponse;
 import com.scb.askopt_backend.entity.Agent;
 import com.scb.askopt_backend.mapper.AgentMapper;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.client.RestTemplate;
+import org.springframework.web.reactive.function.client.WebClient;
+import reactor.core.publisher.Mono;
 
 import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
 /**
@@ -22,83 +30,28 @@ import java.util.Objects;
 public class AgentService {
     @Autowired
     private AgentMapper agentMapper;
+    @Autowired
+    private RestTemplate restTemplate;
 
-    /**
-     * Agent 注册
-     * @param request 注册请求
-     * @return 注册响应
-     */
-    @Transactional(rollbackFor = Exception.class)
-    public AgentRegisterResponse register(AgentRegisterRequest request) {
-        AgentRegisterResponse response = new AgentRegisterResponse();
+    @Autowired
+    private HmacRequestSigner signer;
 
-        Agent existAgent = agentMapper.selectByName(request.getName());
+    public AgentHealthResponse heartbeat() {
+        List<Agent> agents = agentMapper.findAllAgents();
+        String urlPath = "/health";
+        for (Agent agent : agents) {
+            String agentUrl = "http://" + agent.getIp() + ":" + agent.getPort();
+            HttpHeaders headers = new HttpHeaders();
+            signer.sign(HttpMethod.GET, urlPath, "", headers);
 
-        if (Objects.nonNull(existAgent)) {
-            // AgentName已注册，返回已存在的Agent ID
-            response.setSuccess(true);
-            response.setMessage("该Agent已注册");
-            response.setAgentId(existAgent.getId());
-            return response;
+            HttpEntity<String> entity = new HttpEntity<>("", headers);
+            restTemplate.exchange(
+                    agentUrl + urlPath,
+                    HttpMethod.GET,
+                    entity,
+                    Void.class
+            );
         }
-
-        // 2. 新增Agent记录
-        Agent newAgent = new Agent();
-        newAgent.setIp(request.getIp());
-        newAgent.setPort(request.getPort());
-        newAgent.setGroupId(request.getGroupId());
-        newAgent.setName(request.getName());
-        newAgent.setStatus("ONLINE");
-        newAgent.setLastHeartbeatTime(LocalDateTime.now());
-        newAgent.setCreateTime(LocalDateTime.now());
-        newAgent.setUpdateTime(LocalDateTime.now());
-
-        agentMapper.insertAgent(newAgent);
-
-        // 3. 返回注册结果
-        response.setSuccess(true);
-        response.setMessage("注册成功");
-        response.setAgentId(newAgent.getId());
-        return response;
-    }
-
-    /**
-     * Agent 心跳上报（更新在线状态）
-     * @param request 心跳请求
-     * @return 是否成功
-     */
-    public Boolean heartbeat(AgentHeartbeatRequest request) {
-        // 1. 校验Agent ID和IP是否匹配
-        Agent agent = agentMapper.selectById(request.getAgentId());
-        if (Objects.isNull(agent) || !agent.getIp().equals(request.getIp())) {
-            return false;
-        }
-
-        // 2. 更新心跳时间和状态
-        agent.setStatus("ONLINE");
-        agent.setLastHeartbeatTime(LocalDateTime.now());
-        agent.setUpdateTime(LocalDateTime.now());
-
-        agentMapper.updateHeartbeat(agent);
-        return true;
-    }
-
-    /**
-     * Agent 上报容器数据（可扩展：存储到数据库/消息队列）
-     * @param request 上报请求
-     * @return 是否成功
-     */
-    public Boolean report(AgentReportRequest request) {
-        // 1. 校验Agent合法性
-        Agent agent = agentMapper.selectById(request.getAgentId());
-        if (Objects.isNull(agent) || !agent.getIp().equals(request.getIp())) {
-            return false;
-        }
-
-        // 2. 处理上报数据（示例：可存储到数据库/转发到消息队列）
-        // TODO: 实际场景中，可将containers数据关联Agent ID存储，或推送到MQ供其他服务消费
-        System.out.println("Agent " + request.getAgentId() + " 上报容器数据：" + request.getContainers());
-
-        return true;
+        return null;
     }
 }

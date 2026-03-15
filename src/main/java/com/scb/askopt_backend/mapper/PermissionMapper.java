@@ -1,6 +1,5 @@
 package com.scb.askopt_backend.mapper;
 
-import com.scb.askopt_backend.dto.PermissionRule;
 import com.scb.askopt_backend.entity.SysPermission;
 import lombok.Data;
 import org.apache.ibatis.annotations.*;
