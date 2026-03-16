@@ -3,6 +3,7 @@ package com.scb.askopt_backend.controller;
 import com.scb.askopt_backend.dto.agent.*;
 import com.scb.askopt_backend.service.AgentService;
 import com.scb.askopt_backend.vo.ApiResponse;
+import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
@@ -25,6 +26,17 @@ public class AgentController {
     public ApiResponse<AgentHealthResponse> heartbeat() {
             AgentHealthResponse success = agentService.heartbeat();
             return ApiResponse.success(success);
+    }
+    /**
+     * Agent 注册接口
+     * Post /api/agent/register
+     * 请求体：AgentRegisterRequest
+     * 响应体：AgentRegisterResponse
+     */
+    @PostMapping("register")
+    public ApiResponse<AgentRegisterResponse> register(@Valid @RequestBody AgentRegisterRequest request) {
+        AgentRegisterResponse registerResponse  = agentService.register(request);
+        return ApiResponse.success(registerResponse );
     }
 
 }

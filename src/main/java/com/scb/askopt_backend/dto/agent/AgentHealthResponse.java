@@ -11,16 +11,6 @@ public class AgentHealthResponse {
     private Long total;
     private Long success;
     private Long failed;
-    private List<AgentHealthItem> agents;
+    private List<AgentDTO> agents;
 
-    @Data
-    public static class AgentHealthItem {
-
-        private Long id;
-        private String name;
-        private String ip;
-        private Integer port;
-        private String status;
-        private LocalDateTime lastHeartbeatTime;
-    }
 }
