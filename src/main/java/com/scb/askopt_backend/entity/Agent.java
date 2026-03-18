@@ -52,4 +52,9 @@ public class Agent {
      * 更新时间
      */
     private LocalDateTime updateTime;
+
+    /**
+     * 连续失败次数
+     */
+    private Integer failCount;
 }

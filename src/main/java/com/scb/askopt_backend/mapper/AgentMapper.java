@@ -49,18 +49,15 @@ public interface AgentMapper {
         UPDATE askops_schema.t_agent
         SET status = #{status},
             last_heartbeat_time = now(),
-            update_time = now()
+            update_time = now(),
+            failcount = #{failCount}
         WHERE id = #{id}
     """)
     void updateStatus(@Param("id") Long id,
-                      @Param("status") String status);
-    @Update("""
-        UPDATE askops_schema.t_agent
-        SET last_heartbeat_time = #{time},
-            update_time = now()
-        WHERE id = #{id}
-    """)
-    void updateHeartbeatTime(Long id, LocalDateTime time);
+                      @Param("status") String status,
+                      @Param("failCount") Integer failCount);
+
+
     /**
      * 插入Agent数据（自动生成主键ID）
      * @param agent 待插入的Agent对象
@@ -71,4 +68,25 @@ public interface AgentMapper {
     @Options(useGeneratedKeys = true, keyProperty = "id", keyColumn = "id")
     void insertAgent(Agent agent);
 
+    // 原子递增失败次数
+    @Update("UPDATE t_agent SET failcount = failcount + 1 WHERE id = #{agentId}")
+    void incrementFailCount(@Param("agentId") Long agentId);
+
+    // 关键修复：查询单条Agent的失败次数
+    @Select("SELECT failcount FROM t_agent WHERE id = #{agentId}")
+    Integer getFailCountById(@Param("agentId") Long agentId);
+
+    // 批量更新状态、失败次数、心跳时间（合并操作，减少数据库交互）
+    @Update("UPDATE t_agent SET status = #{status}, failcount = #{failCount}, last_heartbeat_time = #{heartbeatTime} WHERE id = #{agentId}")
+    void updateAgentStatusAndFailCount(
+            @Param("agentId") Long agentId,
+            @Param("status") String status,
+            @Param("failCount") Integer failCount,
+            @Param("heartbeatTime") LocalDateTime heartbeatTime);
+
+    // 仅更新心跳时间
+    @Update("UPDATE t_agent SET last_heartbeat_time = #{heartbeatTime} WHERE id = #{agentId}")
+    void updateHeartbeatTime(
+            @Param("agentId") Long agentId,
+            @Param("heartbeatTime") LocalDateTime heartbeatTime);
 }

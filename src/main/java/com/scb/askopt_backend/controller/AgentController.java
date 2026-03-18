@@ -7,8 +7,6 @@ import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.Map;
-
 /**
  * Agent 管理API控制器
  */
@@ -21,11 +19,12 @@ public class AgentController {
     /**
      * Agent 心跳接口
      * Get /api/agent/health
+     * 只查数据库，不做网络请求
      */
     @GetMapping("/health")
     public ApiResponse<AgentHealthResponse> heartbeat() {
-            AgentHealthResponse success = agentService.heartbeat();
-            return ApiResponse.success(success);
+        AgentHealthResponse success = agentService.getHeartbeat();
+        return ApiResponse.success(success);
     }
     /**
      * Agent 注册接口
