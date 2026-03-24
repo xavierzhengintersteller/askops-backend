@@ -17,23 +17,21 @@ public class PermissionMatcher {
 
     private final PermissionMapper permissionMapper;
 
-    /**
-     * 使用 volatile + 不可变集合
-     * 保证线程安全读取
-     */
     private volatile List<SysPermission> permissions = List.of();
-
     private final AntPathMatcher pathMatcher = new AntPathMatcher();
 
     @PostConstruct
     public void loadPermissions() {
+        // ====================== 修复点 1：换成 MP 方法 ======================
+        List<SysPermission> list = permissionMapper.selectList(null);
 
-        List<SysPermission> list = permissionMapper.findAllPermissions();
+        // ====================== 修复点 2：空指针安全排序 ======================
+        list.sort((a, b) -> {
+            String urlA = a.getUrlPattern() == null ? "" : a.getUrlPattern();
+            String urlB = b.getUrlPattern() == null ? "" : b.getUrlPattern();
+            return Integer.compare(urlB.length(), urlA.length());
+        });
 
-        // 长度降序排序（精确优先）
-        list.sort((a, b) -> b.getUrlPattern().length() - a.getUrlPattern().length());
-
-        // ✅ 关键：整体替换引用，而不是修改原集合
         permissions = List.copyOf(list);
 
         log.info("Loaded {} permissions:", permissions.size());
@@ -46,9 +44,7 @@ public class PermissionMatcher {
     }
 
     public String match(String path, String method) {
-
         for (SysPermission p : permissions) {
-
             String httpMethod = p.getHttpMethod();
 
             if (httpMethod != null
@@ -57,11 +53,14 @@ public class PermissionMatcher {
                 continue;
             }
 
-            if (pathMatcher.match(p.getUrlPattern(), path)) {
+            // 空值安全判断
+            String pattern = p.getUrlPattern();
+            if (pattern == null) continue;
+
+            if (pathMatcher.match(pattern, path)) {
                 return String.valueOf(p.getId());
             }
         }
-
         return null;
     }
 }

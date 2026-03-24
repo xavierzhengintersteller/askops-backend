@@ -10,15 +10,17 @@ spring:
     redis:
       host: localhost
       port: 6379
-      password: ""       # 如果有密码
+      password: ""       # 生产环境建议配置密码
       database: 0
       timeout: 5000ms
 
-mybatis:
-  mapper-locations: classpath:mapper/*.xml                # MyBatis Mapper XML 文件路径
-  type-aliases-package: com.example.askopt.entity         # 实体类所在包
+# 统一使用 MyBatis-Plus 配置
+mybatis-plus:
+  mapper-locations: classpath:mapper/**/*.xml
+  type-aliases-package: com.scb.askopt_backend.entity  # 统一实体类路径
   configuration:
-    map-underscore-to-camel-case: true                   # 开启驼峰命名自动转换
+    map-underscore-to-camel-case: true
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl  # 生产环境建议移除或改为日志框架
 
 server:
   port: 8082

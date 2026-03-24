@@ -163,7 +163,7 @@ SELECT
 FROM askops_schema.sys_permission
 WHERE permission_code = 'containers:batch-restart';
 
-
+alter table t_agent add column fail_count int4
 
 
 ## 当创建一个用户，分配权限过程

@@ -1,8 +1,10 @@
 package com.scb.askopt_backend.entity;
 
+import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
 
 @Data
+@TableName("sys_permission")
 public class SysPermission {
 
     private Long id;

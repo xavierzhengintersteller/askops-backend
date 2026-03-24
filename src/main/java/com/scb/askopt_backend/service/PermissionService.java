@@ -1,5 +1,7 @@
 package com.scb.askopt_backend.service;
 
+import com.baomidou.mybatisplus.extension.service.IService;
+import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.scb.askopt_backend.config.RedisUtil;
 import com.scb.askopt_backend.mapper.PermissionMapper;
 import com.scb.askopt_backend.mapper.UserMapper;
@@ -10,7 +12,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.Set;
 
 @Service
-public class PermissionService {
+public class PermissionService extends ServiceImpl<PermissionMapper, com.scb.askopt_backend.entity.SysPermission> implements IService<com.scb.askopt_backend.entity.SysPermission> {
     @Autowired
     private UserMapper userMapper;
     @Autowired
@@ -36,4 +38,3 @@ public class PermissionService {
         redisUtil.set("auth:perm:" + userId, newPerms, 7*24*60*60);
     }
 }
-

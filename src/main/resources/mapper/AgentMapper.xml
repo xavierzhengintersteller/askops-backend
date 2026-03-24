@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.scb.askopt_backend.mapper.AgentMapper">
+
+    <select id="findAgentsByUserId" resultType="com.scb.askopt_backend.dto.AgentIpPortDTO">
+        select a.ip, a.port
+        from t_agent a
+        join t_group g on a.group_id = g.id
+        join role_group_mapping rg on rg.group_id = g.id
+        join user_role_mapping ur on ur.role_id = rg.role_id
+        where ur.user_id = #{userId}
+    </select>
+
+    <select id="findAllAgents" resultType="com.scb.askopt_backend.entity.Agent">
+        SELECT id, name, ip, port, status, last_heartbeat_time
+        FROM t_agent
+    </select>
+
+    <update id="updateStatus">
+        UPDATE t_agent
+        SET status = #{status},
+            last_heartbeat_time = now(),
+            update_time = now(),
+            failcount = #{failCount}
+        WHERE id = #{id}
+    </update>
+
+    <insert id="insertAgent" useGeneratedKeys="true" keyProperty="id" keyColumn="id">
+        INSERT INTO t_agent (name, ip, port, group_id, status, last_heartbeat_time, create_time, update_time, failcount)
+        VALUES (#{name}, #{ip}, #{port}, #{groupId}, #{status}, #{lastHeartbeatTime}, #{createTime}, #{updateTime}, #{failCount})
+    </insert>
+
+    <update id="incrementFailCount">
+        UPDATE t_agent SET failcount = failcount + 1 WHERE id = #{agentId}
+    </update>
+
+    <select id="getFailCountById" resultType="java.lang.Integer">
+        SELECT failcount FROM t_agent WHERE id = #{agentId}
+    </select>
+
+    <update id="updateAgentStatusAndFailCount">
+        UPDATE t_agent SET status = #{status}, failcount = #{failCount}, last_heartbeat_time = #{heartbeatTime} WHERE id = #{agentId}
+    </update>
+
+    <update id="updateHeartbeatTime">
+        UPDATE t_agent SET last_heartbeat_time = #{heartbeatTime} WHERE id = #{agentId}
+    </update>
+
+</mapper>

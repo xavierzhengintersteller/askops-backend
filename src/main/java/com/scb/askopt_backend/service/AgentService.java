@@ -1,5 +1,7 @@
 package com.scb.askopt_backend.service;
 
+import com.baomidou.mybatisplus.extension.service.IService;
+import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.scb.askopt_backend.config.Hmac.HmacRequestSigner;
 import com.scb.askopt_backend.constant.AgentStatus;
 import com.scb.askopt_backend.dto.agent.*;
@@ -24,9 +26,7 @@ import java.util.List;
  */
 @Slf4j
 @Service
-public class AgentService {
-    @Autowired
-    private AgentMapper agentMapper;
+public class AgentService extends ServiceImpl<AgentMapper, Agent> implements IService<Agent> {
     @Autowired
     private RestTemplate restTemplate;
 
@@ -44,8 +44,8 @@ public class AgentService {
             agent.setGroupId(request.getGroupId());
             agent.setStatus(AgentStatus.REGISTERED.getCode());
             agent.setLastHeartbeatTime(LocalDateTime.now());
-            // save to DB
-            agentMapper.insertAgent(agent);
+            // save to DB using MyBatis-Plus
+            this.save(agent);
             // 构建成功响应
             response.setAgentId(agent.getId());
             response.setSuccess(true);
@@ -62,7 +62,8 @@ public class AgentService {
      * 只查数据库，不做网络请求
      */
     public AgentHealthResponse getHeartbeat() {
-        List<Agent> agents = agentMapper.findAllAgents();
+        // 使用 MyBatis-Plus 查询所有 agents
+        List<Agent> agents = this.list();
         List<AgentDTO> result = new ArrayList<>();
         long success = 0;
         long failed = 0;

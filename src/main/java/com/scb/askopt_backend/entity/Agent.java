@@ -1,5 +1,7 @@
 package com.scb.askopt_backend.entity;
 
+import com.baomidou.mybatisplus.annotation.TableField;
+import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
 import java.time.LocalDateTime;
 
@@ -7,6 +9,7 @@ import java.time.LocalDateTime;
  * Agent 服务器实体（存储到数据库）
  */
 @Data
+@TableName("t_agent")
 public class Agent {
     /**
      * Agent 唯一标识
@@ -26,7 +29,6 @@ public class Agent {
     /**
      * 所属分组（用于权限控制）
      */
-    private Long groupId;
 
     /**
      * Agent 名称（唯一）
@@ -41,20 +43,26 @@ public class Agent {
     /**
      * 最后心跳时间（用于检测离线）
      */
+    @TableField("last_heartbeat_time")
     private LocalDateTime lastHeartbeatTime;
 
     /**
      * 注册时间
      */
+    @TableField("create_time")
     private LocalDateTime createTime;
 
     /**
      * 更新时间
      */
+    @TableField("update_time")
     private LocalDateTime updateTime;
+    @TableField("group_id")
+    private Long groupId;
 
     /**
      * 连续失败次数
      */
+    @TableField("failcount")
     private Integer failCount;
 }
