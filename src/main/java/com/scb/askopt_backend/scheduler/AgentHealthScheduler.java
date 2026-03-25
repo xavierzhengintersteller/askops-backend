@@ -51,7 +51,7 @@ public class AgentHealthScheduler {
     /**
      * 固定延迟6秒探测一次（原注释写的每分钟，代码是6秒，保持代码逻辑）
      */
-    @Scheduled(fixedDelay = 6000)
+    @Scheduled(fixedDelay = 600000)
     public void probeAndUpdateAgentStatus() {
         log.info("[AgentHealthScheduler] 开始探测所有 agent 健康状态");
         List<Agent> agents = agentMapper.findAllAgents();
