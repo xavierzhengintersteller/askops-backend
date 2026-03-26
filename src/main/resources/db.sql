@@ -18,7 +18,36 @@ CREATE TABLE sys_permission (
     CONSTRAINT uk_permission_code UNIQUE (permission_code) -- 显式定义唯一约束
 );
 
+CREATE TABLE sys_permission (
+                                id SERIAL PRIMARY KEY,
 
+                                permission_code VARCHAR(100) NOT NULL UNIQUE,
+
+                                permission_name VARCHAR(100) NOT NULL,   -- 👉 前端展示用
+
+                                parent_id INT DEFAULT NULL,              -- 👉 树结构核心
+
+                                type VARCHAR(20) NOT NULL,               -- 👉 menu / button / api
+
+                                url_pattern VARCHAR(255),                -- 👉 后端鉴权用
+                                http_method VARCHAR(10),
+
+                                path VARCHAR(255),                       -- 👉 前端路由
+                                component VARCHAR(255),                  -- 👉 前端组件路径
+
+                                icon VARCHAR(50),                        -- 👉 UI
+
+                                sort INT DEFAULT 0,                      -- 👉 排序
+
+                                visible BOOLEAN DEFAULT TRUE,            -- 👉 是否显示菜单
+
+                                description VARCHAR(255),
+
+                                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+                                CONSTRAINT fk_parent_permission
+                                    FOREIGN KEY (parent_id) REFERENCES sys_permission(id)
+);
 
 CREATE TABLE sys_role (
     id SERIAL PRIMARY KEY,
@@ -176,3 +205,41 @@ insert into role_permission_mapping (role_id, permission_id)
 values
     ((select id from sys_role where role_code = 'rosetta-dev'), (1)),
     ((select id from sys_role where role_code = 'rosetta-dev'), (2));
+
+
+## 修改当前权限表
+-- 1. 扩展 permission_code 字段长度
+ALTER TABLE sys_permission
+ALTER COLUMN permission_code TYPE VARCHAR(100);
+
+-- 2. 修改原有字段 url_pattern 允许 NULL
+ALTER TABLE sys_permission
+    ALTER COLUMN url_pattern DROP NOT NULL;
+
+-- 3. 新增字段（先不加 NOT NULL，给默认值）
+ALTER TABLE sys_permission
+    ADD COLUMN permission_name VARCHAR(100) DEFAULT '',
+ADD COLUMN parent_id INT DEFAULT NULL,
+ADD COLUMN type VARCHAR(20) DEFAULT 'api',
+ADD COLUMN path VARCHAR(255),
+ADD COLUMN component VARCHAR(255),
+ADD COLUMN icon VARCHAR(50),
+ADD COLUMN sort INT DEFAULT 0,
+ADD COLUMN visible BOOLEAN DEFAULT TRUE,
+ADD COLUMN created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
+
+-- 4. 移除默认值并添加 NOT NULL 约束
+ALTER TABLE sys_permission
+    ALTER COLUMN permission_name DROP DEFAULT,
+ALTER COLUMN permission_name SET NOT NULL,
+ALTER COLUMN type DROP DEFAULT,
+ALTER COLUMN type SET NOT NULL;
+
+-- 5. 添加自关联外键
+ALTER TABLE sys_permission
+    ADD CONSTRAINT fk_parent_permission
+        FOREIGN KEY (parent_id) REFERENCES sys_permission(id);
+
+-- 6. 删除旧的唯一约束（如果存在）
+ALTER TABLE sys_permission
+DROP CONSTRAINT IF EXISTS uk_permission_code;
