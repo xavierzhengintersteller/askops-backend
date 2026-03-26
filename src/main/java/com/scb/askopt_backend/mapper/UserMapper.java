@@ -2,8 +2,8 @@ package com.scb.askopt_backend.mapper;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.scb.askopt_backend.entity.SysUser;
+import com.scb.askopt_backend.vo.UserWithRolesVO;
 import org.apache.ibatis.annotations.Param;
-import org.apache.ibatis.annotations.Mapper;
 
 import java.util.List;
 
@@ -40,5 +40,9 @@ public interface UserMapper extends BaseMapper<SysUser> {
      * @return 权限版本号
      */
     Long getPermissionVersion(@Param("userId") Long userId);
-
+    /**
+     * 查询所有用户及其对应的角色列表
+     * @return 用户+角色VO集合
+     */
+    List<UserWithRolesVO> selectUsersWithRoles();
 }
