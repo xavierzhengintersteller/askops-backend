@@ -53,4 +53,7 @@ public interface PermissionMapper extends BaseMapper<SysPermission> {
      */
     Set<Long> findPermissionIdsByUserId(@Param("userId") Long userId);
 
+    @Select("SELECT id FROM askops_schema.sys_permission")
+    Set<Long> selectAllPermissionIds();
+
 }

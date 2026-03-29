@@ -32,7 +32,17 @@ public interface UserMapper extends BaseMapper<SysUser> {
 
     @Select("SELECT permission_version FROM askops_schema.sys_user WHERE id = #{userId}")
     Long getPermissionVersion(@Param("userId") Long userId);
-
+    @Select("""
+            SELECT EXISTS (
+                SELECT 1
+                FROM askops_schema.user_role_mapping sur
+                JOIN askops_schema.sys_role r ON sur.role_id = r.id
+                WHERE sur.user_id = #{userId}
+                  AND r.is_super_admin = true
+                  AND r.role_code = 'admin'
+            )
+        """)
+    boolean isSuperAdmin(@Param("userId") Long userId);
 
     // ===================== 菜单 + 权限 核心接口 =====================
     @Select("""
@@ -71,4 +81,20 @@ public interface UserMapper extends BaseMapper<SysUser> {
             WHERE sur.user_id = #{userId}
             """)
     Set<String> selectUserPermissionCodes(@Param("userId") Long userId);
+    // 超管 → 查询所有菜单
+    @Select("""
+        SELECT id, parent_id, permission_name, path, component, icon, sort
+        FROM askops_schema.sys_permission
+        WHERE type = 'menu' AND visible = true
+        ORDER BY sort
+        """)
+    List<UserMenuVO> selectAllMenuList();
+
+    // 超管 → 所有权限ID
+    @Select("SELECT id FROM askops_schema.sys_permission")
+    Set<Long> selectAllPermissionIds();
+
+    // 超管 → 所有权限码
+    @Select("SELECT permission_code FROM askops_schema.sys_permission")
+    Set<String> selectAllPermissionCodes();
 }

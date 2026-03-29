@@ -3,6 +3,7 @@ package com.scb.askopt_backend.service;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.scb.askopt_backend.entity.SysUser;
 import com.scb.askopt_backend.mapper.UserMapper;
+import com.scb.askopt_backend.security.AuthContext;
 import com.scb.askopt_backend.vo.UserMenuVO;
 import com.scb.askopt_backend.vo.UserPermissionAndMenuVO;
 import org.springframework.stereotype.Service;
@@ -17,14 +18,23 @@ public class UserService extends ServiceImpl<UserMapper, SysUser> {
      */
     public UserPermissionAndMenuVO getPermissionAndMenu(Long userId) {
         UserPermissionAndMenuVO vo = new UserPermissionAndMenuVO();
+        // ==============================================
+        // 🔥 直接从 ThreadLocal 获取是否超级管理员
+        // ==============================================
+        boolean isSuperAdmin = AuthContext.isSuperAdmin();
 
-        // 1. 获取菜单树
-        List<UserMenuVO> menuList = baseMapper.selectUserMenuList(userId);
-        vo.setLeftMenuTree(buildMenuTree(menuList, null));
-
-        // 2. 获取权限ID + 权限码
-        vo.setPermissionIds(baseMapper.selectUserPermissionIds(userId));
-        vo.setPermissionCodes(baseMapper.selectUserPermissionCodes(userId));
+        if (isSuperAdmin) {
+            // ✅ 超管 → 直接返回全量菜单 + 全权限
+            vo.setLeftMenuTree(buildMenuTree(baseMapper.selectAllMenuList(), null));
+            vo.setPermissionIds(baseMapper.selectAllPermissionIds());
+            vo.setPermissionCodes(baseMapper.selectAllPermissionCodes());
+        } else {
+            // ✅ 普通用户 → 查自己的权限
+            List<UserMenuVO> menuList = baseMapper.selectUserMenuList(userId);
+            vo.setLeftMenuTree(buildMenuTree(menuList, null));
+            vo.setPermissionIds(baseMapper.selectUserPermissionIds(userId));
+            vo.setPermissionCodes(baseMapper.selectUserPermissionCodes(userId));
+        }
 
         return vo;
     }
