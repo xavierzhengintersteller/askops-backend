@@ -2,47 +2,73 @@ package com.scb.askopt_backend.mapper;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.scb.askopt_backend.entity.SysUser;
+import com.scb.askopt_backend.vo.UserMenuVO;
 import com.scb.askopt_backend.vo.UserWithRolesVO;
 import org.apache.ibatis.annotations.Param;
+import org.apache.ibatis.annotations.Select;
+import org.apache.ibatis.annotations.Update;
 
 import java.util.List;
+import java.util.Set;
 
 public interface UserMapper extends BaseMapper<SysUser> {
 
+    @Select("SELECT * FROM askops_schema.sys_user WHERE username = #{username}")
     SysUser findByUsername(@Param("username") String username);
 
+    @Select("SELECT * FROM askops_schema.sys_user WHERE id = #{userId}")
     SysUser findByUserId(@Param("userId") Long userId);
 
-    int insert(SysUser user);
-    /**
-     * 根据用户ID查询用户信息
-     * @param userId 用户ID
-     * @return 系统用户信息
-     */
+    @Select("SELECT * FROM askops_schema.sys_user WHERE id = #{userId}")
     SysUser selectUserById(@Param("userId") Long userId);
 
-    /**
-     * 查询所有用户信息
-     * @return 用户列表
-     */
+    @Select("SELECT * FROM askops_schema.sys_user")
     List<SysUser> selectAllUsers();
 
-    /**
-     * 递增用户权限版本号（你现有代码中的方法）
-     * 说明：需确保sys_user表有permission_version字段，若无需先新增该字段
-     * @param userId 用户ID
-     */
+    @Update("UPDATE askops_schema.sys_user " +
+            "SET permission_version = permission_version + 1 " +
+            "WHERE id = #{userId}")
     void incrementPermissionVersion(@Param("userId") Long userId);
 
-    /**
-     * 获取用户当前的权限版本号（你现有代码中的方法）
-     * @param userId 用户ID
-     * @return 权限版本号
-     */
+    @Select("SELECT permission_version FROM askops_schema.sys_user WHERE id = #{userId}")
     Long getPermissionVersion(@Param("userId") Long userId);
-    /**
-     * 查询所有用户及其对应的角色列表
-     * @return 用户+角色VO集合
-     */
-    List<UserWithRolesVO> selectUsersWithRoles();
+
+
+    // ===================== 菜单 + 权限 核心接口 =====================
+    @Select("""
+            SELECT DISTINCT
+                sp.id,
+                sp.parent_id,
+                sp.permission_name,
+                sp.path,
+                sp.component,
+                sp.icon,
+                sp.sort
+            FROM askops_schema.user_role_mapping sur
+            JOIN askops_schema.role_permission_mapping srp ON sur.role_id = srp.role_id
+            JOIN askops_schema.sys_permission sp ON srp.permission_id = sp.id
+            WHERE sur.user_id = #{userId}
+              AND sp.type = 'menu'
+              AND sp.visible = true
+            ORDER BY sp.sort
+            """)
+    List<UserMenuVO> selectUserMenuList(@Param("userId") Long userId);
+
+    @Select("""
+            SELECT DISTINCT sp.id
+            FROM askops_schema.user_role_mapping sur
+            JOIN askops_schema.role_permission_mapping srp ON sur.role_id = srp.role_id
+            JOIN askops_schema.sys_permission sp ON srp.permission_id = sp.id
+            WHERE sur.user_id = #{userId}
+            """)
+    Set<Long> selectUserPermissionIds(@Param("userId") Long userId);
+
+    @Select("""
+            SELECT DISTINCT sp.permission_code
+            FROM askops_schema.user_role_mapping sur
+            JOIN askops_schema.role_permission_mapping srp ON sur.role_id = srp.role_id
+            JOIN askops_schema.sys_permission sp ON srp.permission_id = sp.id
+            WHERE sur.user_id = #{userId}
+            """)
+    Set<String> selectUserPermissionCodes(@Param("userId") Long userId);
 }

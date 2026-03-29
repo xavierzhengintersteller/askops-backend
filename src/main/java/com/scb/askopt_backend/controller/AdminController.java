@@ -1,6 +1,7 @@
 package com.scb.askopt_backend.controller;
 
 import com.scb.askopt_backend.entity.SysPermission;
+import com.scb.askopt_backend.service.AdminService;
 import com.scb.askopt_backend.service.PermissionService;
 import com.scb.askopt_backend.service.UserService;
 import com.scb.askopt_backend.vo.ApiResponse;
@@ -14,11 +15,11 @@ import java.util.List;
  * RBAC 管理API控制器
  */
 @RestController
-@RequestMapping("/api/rbac")
-public class RbacController {
+@RequestMapping("/api/admin")
+public class AdminController {
 
     @Autowired
-    private UserService userService;
+    private AdminService adminService;
 
     @Autowired
     private PermissionService permissionService;
@@ -29,7 +30,7 @@ public class RbacController {
      */
     @GetMapping("/users")
     public ApiResponse<List<UserWithRolesVO>> getUsersWithRoles() {
-        List<UserWithRolesVO> users = userService.getUsersWithRoles();
+        List<UserWithRolesVO> users = adminService.getUsersWithRoles();
         return ApiResponse.success(users);
     }
 
