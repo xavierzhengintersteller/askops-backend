@@ -2,11 +2,10 @@ package com.scb.askopt_backend.mapper;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.scb.askopt_backend.entity.SysUser;
+import com.scb.askopt_backend.vo.AgentVO;
+import com.scb.askopt_backend.vo.GroupVO;
 import com.scb.askopt_backend.vo.UserMenuVO;
-import com.scb.askopt_backend.vo.UserWithRolesVO;
-import org.apache.ibatis.annotations.Param;
-import org.apache.ibatis.annotations.Select;
-import org.apache.ibatis.annotations.Update;
+import org.apache.ibatis.annotations.*;
 
 import java.util.List;
 import java.util.Set;
@@ -97,4 +96,54 @@ public interface UserMapper extends BaseMapper<SysUser> {
     // 超管 → 所有权限码
     @Select("SELECT permission_code FROM askops_schema.sys_permission")
     Set<String> selectAllPermissionCodes();
+    // 查询用户拥有的角色IDS
+    @Select("SELECT role_id FROM askops_schema.user_role_mapping WHERE user_id = #{userId}")
+    List<Long> selectRoleIdsByUserId(@Param("userId") Long userId);
+
+    // 删除用户旧角色
+    @Delete("DELETE FROM askops_schema.user_role_mapping WHERE user_id = #{userId}")
+    void deleteUserRoles(@Param("userId") Long userId);
+
+    // 批量插入用户角色
+    @Insert("<script>"
+            + "INSERT INTO askops_schema.user_role_mapping(user_id, role_id) VALUES "
+            + "<foreach collection='roleIds' item='roleId' separator=','>"
+            + "(#{userId}, #{roleId})"
+            + "</foreach>"
+            + "</script>")
+    void insertUserRoles(
+            @Param("userId") Long userId,
+            @Param("roleIds") List<Long> roleIds
+    );
+    // ========================= 正确版本 =========================
+// 1. 查询用户【通过角色】拥有的 组列表
+    @Select("""
+    SELECT DISTINCT
+        g.id AS groupId,
+        g.group_name AS groupName
+    FROM askops_schema.user_role_mapping urm
+    JOIN askops_schema.role_group_mapping rgm 
+        ON urm.role_id = rgm.role_id
+    JOIN askops_schema.t_group g 
+        ON rgm.group_id = g.id
+    WHERE urm.user_id = #{userId}
+""")
+    List<GroupVO> selectGroupsByUserId(@Param("userId") Long userId);
+
+    // 2. 查询用户【通过角色→组】拥有的 Agent（带IP）
+    @Select("""
+    SELECT DISTINCT
+        a.id AS agentId,
+        a.ip,
+        a.name,
+        a.port,
+        a.group_id AS groupId
+    FROM askops_schema.user_role_mapping urm
+    JOIN askops_schema.role_group_mapping rgm 
+        ON urm.role_id = rgm.role_id
+    JOIN askops_schema.t_agent a 
+        ON rgm.group_id = a.group_id
+    WHERE urm.user_id = #{userId}
+""")
+    List<AgentVO> selectAgentsByUserId(@Param("userId") Long userId);
 }
