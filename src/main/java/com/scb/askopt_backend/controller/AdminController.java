@@ -1,6 +1,7 @@
 package com.scb.askopt_backend.controller;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.scb.askopt_backend.dto.admin.AssignPermissionToRoleDTO;
 import com.scb.askopt_backend.dto.admin.AssignRoleDTO;
 import com.scb.askopt_backend.dto.admin.AssignRoleGroupDTO;
 import com.scb.askopt_backend.dto.admin.UserPageDTO;
@@ -112,6 +113,17 @@ public class AdminController {
             return ApiResponse.error(403, "仅超级管理员可操作");
         }
         adminService.assignRolesToUser(dto);
+        return ApiResponse.success();
+    }
+    /**
+     * 给角色分配权限      * POST /api/admin/role/assign-permissions
+     */
+    @PostMapping("/role/assign-permissions")
+    public ApiResponse<Void> assignPermissionsToRole(@RequestBody AssignPermissionToRoleDTO dto) {
+        if (!AuthContext.isSuperAdmin()) {
+            return ApiResponse.error(403, "仅超级管理员可操作");
+        }
+        adminService.assignPermissionsToRole(dto);
         return ApiResponse.success();
     }
     // ==================== 角色 ↔ 组 关联管理 ====================

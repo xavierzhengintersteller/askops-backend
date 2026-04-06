@@ -50,4 +50,22 @@ public interface RoleMapper extends BaseMapper<SysRole> {
             @Param("roleId") Long roleId,
             @Param("groupIds") List<Long> groupIds
     );
+    // 删除角色的所有权限
+    @Delete("""
+        DELETE FROM askops_schema.role_permission_mapping
+        WHERE role_id = #{roleId}
+    """)
+    void deleteRolePermissions(@Param("roleId") Long roleId);
+
+    // 批量插入角色-权限关系
+    @Insert("<script>"
+            + "INSERT INTO askops_schema.role_permission_mapping(role_id, permission_id) VALUES "
+            + "<foreach collection='permissionIds' item='permissionId' separator=','>"
+            + "(#{roleId}, #{permissionId})"
+            + "</foreach>"
+            + "</script>")
+    void batchInsertRolePermissions(
+            @Param("roleId") Long roleId,
+            @Param("permissionIds") List<Long> permissionIds
+    );
 }

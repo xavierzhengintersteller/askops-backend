@@ -3,6 +3,7 @@ package com.scb.askopt_backend.service;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.scb.askopt_backend.dto.admin.AssignPermissionToRoleDTO;
 import com.scb.askopt_backend.dto.admin.AssignRoleDTO;
 import com.scb.askopt_backend.dto.admin.AssignRoleGroupDTO;
 import com.scb.askopt_backend.dto.admin.UserPageDTO;
@@ -128,10 +129,29 @@ public class AdminService extends ServiceImpl<UserMapper, SysUser> {
     }
 
     /**
+     * 给角色分配权限（事务 + 先删后插）
+     * @param dto
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public void assignPermissionsToRole(AssignPermissionToRoleDTO dto) {
+        Long roleId = dto.getRoleId();
+        List<Long> permissionIds = dto.getPermissionIds();
+
+        // 1. 删除旧关系
+        roleMapper.deleteRolePermissions(roleId);
+
+        // 2. 批量插入新关系
+        if (permissionIds != null && !permissionIds.isEmpty()) {
+            roleMapper.batchInsertRolePermissions(roleId, permissionIds);
+        }
+    }
+    /**
      * 清空角色组
      */
     @Transactional(rollbackFor = Exception.class)
     public void clearRoleGroups(Long roleId) {
         roleMapper.deleteRoleGroups(roleId);
     }
+
+
 }

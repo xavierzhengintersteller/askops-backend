@@ -20,35 +20,35 @@ public class PodmanController {
     @Autowired
     private PodmanService podmanService;
 
-    @GetMapping(
-            value = "/{name}/logs/stream",
-            produces = MediaType.TEXT_EVENT_STREAM_VALUE
-    )
-    public Flux<ServerSentEvent<String>> streamLogs(
-            @PathVariable String name) {
-
-        return podmanService.streamContainerLogs(name)
-                .map(line ->
-                        ServerSentEvent.builder(line)
-                                .event("log")
-                                .build()
-                );
-    }
-    @GetMapping("/{name}/logs/raws")
-    public ApiResponse<List<String>> rawLogs(
-            @PathVariable String name,
-
-
-            @RequestParam(required = false, defaultValue = "100") int lines
-    ) {
-        try {
-            // 调用 Service 层获取日志列表
-            List<String> logs = podmanService.rawLogs(name, lines);
-            return ApiResponse.success(logs);
-        } catch (Exception e) {
-            return ApiResponse.error(500,"获取日志失败: " + e.getMessage());
-        }
-    }
+//    @GetMapping(
+//            value = "/{name}/logs/stream",
+//            produces = MediaType.TEXT_EVENT_STREAM_VALUE
+//    )
+//    public Flux<ServerSentEvent<String>> streamLogs(
+//            @PathVariable String name) {
+//
+//        return podmanService.streamContainerLogs(name)
+//                .map(line ->
+//                        ServerSentEvent.builder(line)
+//                                .event("log")
+//                                .build()
+//                );
+//    }
+//    @GetMapping("/{name}/logs/raws")
+//    public ApiResponse<List<String>> rawLogs(
+//            @PathVariable String name,
+//
+//
+//            @RequestParam(required = false, defaultValue = "100") int lines
+//    ) {
+//        try {
+//            // 调用 Service 层获取日志列表
+//            List<String> logs = podmanService.rawLogs(name, lines);
+//            return ApiResponse.success(logs);
+//        } catch (Exception e) {
+//            return ApiResponse.error(500,"获取日志失败: " + e.getMessage());
+//        }
+//    }
     @PostMapping("/restart")
     public ApiResponse<String> restartContainer(@RequestBody ContainerRestartItem request) {
         try {
