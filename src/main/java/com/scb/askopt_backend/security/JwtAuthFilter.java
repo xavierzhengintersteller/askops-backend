@@ -103,7 +103,7 @@ public class JwtAuthFilter implements Filter {
             return;
         }
 
-        // 6. 权限校验
+// 6. 权限校验
         Object permObj = redisUtil.get("auth:perm:" + userId);
         if (permObj == null) {
             forbidden(resp, "no permissions");
@@ -113,17 +113,24 @@ public class JwtAuthFilter implements Filter {
         Set<Long> permissionIds = safeConvertToLongSet(permObj);
         String requiredPermIdStr = permissionMatcher.match(path, method);
 
-        if (requiredPermIdStr != null) {
-            try {
-                Long required = Long.parseLong(requiredPermIdStr);
-                if (!permissionIds.contains(required)) {
-                    forbidden(resp, "no permission");
-                    return;
-                }
-            } catch (NumberFormatException e) {
-                forbidden(resp, "permission config error");
+// ==============================================
+// 🔥 安全加固：没有配置权限 → 直接拒绝，绝不放行
+// ==============================================
+        if (requiredPermIdStr == null) {
+            log.warn("⚠️ 未配置权限的接口被访问：{} {}", method, path);
+            forbidden(resp, "no permission config");
+            return;
+        }
+
+        try {
+            Long required = Long.parseLong(requiredPermIdStr);
+            if (!permissionIds.contains(required)) {
+                forbidden(resp, "no permission");
                 return;
             }
+        } catch (NumberFormatException e) {
+            forbidden(resp, "permission config error");
+            return;
         }
 
         // 7. 放行

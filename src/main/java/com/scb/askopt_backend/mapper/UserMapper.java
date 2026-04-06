@@ -146,4 +146,17 @@ public interface UserMapper extends BaseMapper<SysUser> {
     WHERE urm.user_id = #{userId}
 """)
     List<AgentVO> selectAgentsByUserId(@Param("userId") Long userId);
+    // ========== 【新增】查询用户的角色ID ==========
+    @Select("""
+        SELECT role_id FROM askops_schema.user_role_mapping
+        WHERE user_id = #{userId}
+    """)
+    List<Long> listRoleIdsByUserId(@Param("userId") Long userId);
+
+    // ========== 【新增】查询角色的权限ID ==========
+    @Select("""
+        SELECT permission_id FROM askops_schema.role_permission_mapping
+        WHERE role_id = #{roleId}
+    """)
+    List<Long> listPermissionIdsByRoleId(@Param("roleId") Long roleId);
 }

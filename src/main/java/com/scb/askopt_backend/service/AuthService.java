@@ -15,6 +15,7 @@ import org.springframework.stereotype.Service;
 
 import java.util.*;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -62,9 +63,32 @@ public class AuthService {
         authUser.setSuperAdmin(isSuperAdmin);
         authUser.setPermissionVersion(user.getPermissionVersion());
 
+        // ==============================================
+        // 🔥 🔥 🔥 修复：登录时缓存权限ID到Redis
+        // ==============================================
+        Set<Long> permissionIds = getUserPermissionIds(userId);
+        redisUtil.set("auth:perm:" + userId, permissionIds, REFRESH_TOKEN_EXPIRE_SEC);
+
         // 4. 生成 token
         generateAndCacheTokens(authUser);
         return authUser;
+    }
+
+    // ====================== 【新增】获取用户所有权限ID ======================
+    private Set<Long> getUserPermissionIds(Long userId) {
+        // 1. 查询用户所有角色ID
+        List<Long> roleIds = userMapper.listRoleIdsByUserId(userId);
+        if (roleIds.isEmpty()) {
+            return new HashSet<>();
+        }
+
+        // 2. 查询角色对应的所有权限ID
+        Set<Long> permissionIds = new HashSet<>();
+        for (Long roleId : roleIds) {
+            List<Long> pids = userMapper.listPermissionIdsByRoleId(roleId);
+            permissionIds.addAll(pids);
+        }
+        return permissionIds;
     }
 
     // ====================== 刷新token ======================
@@ -107,6 +131,13 @@ public class AuthService {
         authUser.setRefreshToken(newRefreshToken);
 
         generateAndCacheTokens(authUser);
+
+        // ==============================================
+        // 🔥 🔥 🔥 刷新token时也刷新权限缓存
+        // ==============================================
+        Set<Long> permissionIds = getUserPermissionIds(userId);
+        redisUtil.set("auth:perm:" + userId, permissionIds, REFRESH_TOKEN_EXPIRE_SEC);
+
         return newAccessToken;
     }
 

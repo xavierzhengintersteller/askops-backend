@@ -9,6 +9,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.AntPathMatcher;
 
 import java.util.List;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -22,10 +23,17 @@ public class PermissionMatcher {
 
     @PostConstruct
     public void loadPermissions() {
-        // ====================== 修复点 1：换成 MP 方法 ======================
+        // 1. 查全部
         List<SysPermission> list = permissionMapper.selectList(null);
 
-        // ====================== 修复点 2：空指针安全排序 ======================
+        // ==============================================
+        // 🔥 只保留 type = api 的权限（核心改动）
+        // ==============================================
+        list = list.stream()
+                .filter(p -> "api".equals(p.getType()))
+                .collect(Collectors.toList());
+
+        // 排序：长路径优先
         list.sort((a, b) -> {
             String urlA = a.getUrlPattern() == null ? "" : a.getUrlPattern();
             String urlB = b.getUrlPattern() == null ? "" : b.getUrlPattern();
@@ -34,7 +42,7 @@ public class PermissionMatcher {
 
         permissions = List.copyOf(list);
 
-        log.info("Loaded {} permissions:", permissions.size());
+        log.info("✅ 开机加载 API 权限完成，共 {} 条", permissions.size());
         for (SysPermission p : permissions) {
             log.info("  [{}] {} -> permissionId: {}",
                     p.getHttpMethod(),
@@ -53,7 +61,6 @@ public class PermissionMatcher {
                 continue;
             }
 
-            // 空值安全判断
             String pattern = p.getUrlPattern();
             if (pattern == null) continue;
 
