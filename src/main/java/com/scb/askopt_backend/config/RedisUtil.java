@@ -83,4 +83,10 @@ public final class RedisUtil {
             return false;
         }
     }
+    // 取 Long 值（自动处理 Integer/Long）
+    public Long getLong(String key) {
+        Object value = get(key);
+        if (value == null) return null;
+        return ((Number) value).longValue();
+    }
 }

@@ -14,8 +14,6 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import java.util.*;
-import java.util.concurrent.TimeUnit;
-import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -39,12 +37,11 @@ public class AuthService {
     @Autowired
     private RedisTemplate<String, Object> redisTemplate;
 
-    private static final long ACCESS_TOKEN_EXPIRE_MS = 15 * 60_000L;
-    private static final long ACCESS_TOKEN_CACHE_SEC = 15 * 60L;
-    private static final long REFRESH_TOKEN_EXPIRE_SEC = 7 * 24 * 60 * 60L;
-    private static final long REFRESH_TOKEN_EXTEND_SEC = 24 * 60 * 60L;
+    // 配置常量
+    private static final long ACCESS_TOKEN_EXPIRE_MS = 15 * 60_000L;         // 15分钟
+    private static final long REFRESH_TOKEN_EXPIRE_SEC = 7 * 24 * 60 * 60L;   // 7天
 
-    // ====================== 登录：超级精简 ======================
+    // ====================== 登录 ======================
     public AuthUser login(String username, String password) {
         // 1. 验证用户
         SysUser user = userMapper.findByUsername(username);
@@ -56,33 +53,29 @@ public class AuthService {
         // 2. 判断是否超管
         boolean isSuperAdmin = userMapper.isSuperAdmin(userId);
 
-        // 3. 构建极简 AuthUser
+        // 3. 构建 AuthUser
         AuthUser authUser = new AuthUser();
         authUser.setUserId(user.getId());
         authUser.setUsername(user.getUsername());
         authUser.setSuperAdmin(isSuperAdmin);
         authUser.setPermissionVersion(user.getPermissionVersion());
 
-        // ==============================================
-        // 🔥 🔥 🔥 修复：登录时缓存权限ID到Redis
-        // ==============================================
+        // 4. 缓存权限
         Set<Long> permissionIds = getUserPermissionIds(userId);
         redisUtil.set("auth:perm:" + userId, permissionIds, REFRESH_TOKEN_EXPIRE_SEC);
 
-        // 4. 生成 token
+        // 5. 生成 token
         generateAndCacheTokens(authUser);
         return authUser;
     }
 
-    // ====================== 【新增】获取用户所有权限ID ======================
+    // ====================== 获取用户权限ID ======================
     private Set<Long> getUserPermissionIds(Long userId) {
-        // 1. 查询用户所有角色ID
         List<Long> roleIds = userMapper.listRoleIdsByUserId(userId);
         if (roleIds.isEmpty()) {
             return new HashSet<>();
         }
 
-        // 2. 查询角色对应的所有权限ID
         Set<Long> permissionIds = new HashSet<>();
         for (Long roleId : roleIds) {
             List<Long> pids = userMapper.listPermissionIdsByRoleId(roleId);
@@ -91,72 +84,57 @@ public class AuthService {
         return permissionIds;
     }
 
-    // ====================== 刷新token ======================
+    // ====================== ✅ 刷新Token：只返回新的 accessToken ======================
     public String refreshAccessToken(String refreshToken) {
-        if (refreshToken == null || refreshToken.trim().isEmpty()) {
-            throw new GlobalExceptionHandler.LoginException("refresh token 不能为空");
+        if (refreshToken == null || refreshToken.isBlank()) {
+            throw new GlobalExceptionHandler.LoginException("refreshToken 不能为空");
         }
 
         String refreshKey = "refresh:" + refreshToken;
-        Object userIdObj = redisUtil.get(refreshKey);
-        if (userIdObj == null) {
-            throw new GlobalExceptionHandler.LoginException("refresh token 无效或已过期");
+        Long userId = redisUtil.getLong(refreshKey); // 直接获取 Long！
+
+        if (userId == null) {
+            throw new GlobalExceptionHandler.LoginException("refreshToken 无效或已过期");
         }
-        Long userId = Long.valueOf(userIdObj.toString());
-        redisUtil.del(refreshKey);
 
         SysUser user = userMapper.findByUserId(userId);
         if (user == null) {
             throw new GlobalExceptionHandler.LoginException("用户不存在");
         }
 
-        Object redisVerObj = redisUtil.get("auth:ver:" + userId);
-        if (redisVerObj == null) {
+        Long permissionVersion = redisUtil.getLong("auth:ver:" + userId);
+        if (permissionVersion == null) {
             throw new GlobalExceptionHandler.LoginException("会话已失效");
         }
 
-        // 重新判断超管
-        boolean superAdmin = userMapper.isSuperAdmin(userId);
-
         AuthUser authUser = new AuthUser();
-        authUser.setUserId(user.getId());
+        authUser.setUserId(userId);
         authUser.setUsername(user.getUsername());
-        authUser.setSuperAdmin(superAdmin);
-        authUser.setPermissionVersion((Long) redisVerObj);
+        authUser.setSuperAdmin(userMapper.isSuperAdmin(userId));
+        authUser.setPermissionVersion(permissionVersion);
 
-        String newAccessToken = jwtUtil.generateToken(authUser, ACCESS_TOKEN_EXPIRE_MS);
-        String newRefreshToken = UUID.randomUUID().toString();
-
-        authUser.setAccessToken(newAccessToken);
-        authUser.setRefreshToken(newRefreshToken);
-
-        generateAndCacheTokens(authUser);
-
-        // ==============================================
-        // 🔥 🔥 🔥 刷新token时也刷新权限缓存
-        // ==============================================
-        Set<Long> permissionIds = getUserPermissionIds(userId);
-        redisUtil.set("auth:perm:" + userId, permissionIds, REFRESH_TOKEN_EXPIRE_SEC);
-
-        return newAccessToken;
+        return jwtUtil.generateToken(authUser, ACCESS_TOKEN_EXPIRE_MS);
     }
-
-    // ====================== 生成并缓存token ======================
+    // ====================== 生成并缓存Token（登录时使用） ======================
     private void generateAndCacheTokens(AuthUser authUser) {
+        Long userId = authUser.getUserId();
+
+        // 生成 Token
         String accessToken = jwtUtil.generateToken(authUser, ACCESS_TOKEN_EXPIRE_MS);
         String refreshToken = UUID.randomUUID().toString();
 
         authUser.setAccessToken(accessToken);
         authUser.setRefreshToken(refreshToken);
 
-        Long userId = authUser.getUserId();
+        // 缓存到 Redis
+        redisUtil.set("auth:ver:" + userId, authUser.getPermissionVersion(), REFRESH_TOKEN_EXPIRE_SEC);
+        redisUtil.set("refresh:" + refreshToken, userId, REFRESH_TOKEN_EXPIRE_SEC);
+    }
 
-        redisUtil.set("auth:ver:" + userId,
-                authUser.getPermissionVersion(),
-                REFRESH_TOKEN_EXPIRE_SEC);
-
-        redisUtil.set("refresh:" + refreshToken,
-                userId,
-                REFRESH_TOKEN_EXPIRE_SEC);
+    // ====================== 登出 ======================
+    public void logout(String refreshToken) {
+        if (refreshToken == null || refreshToken.isBlank()) return;
+        String key = "refresh:" + refreshToken;
+        redisUtil.del(key);
     }
 }

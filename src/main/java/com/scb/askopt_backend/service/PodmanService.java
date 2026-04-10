@@ -301,5 +301,75 @@ public class PodmanService {
         );
         return Arrays.asList(response.getBody()); // 转成 List<String>
     }
+    public List<ContainerInfoDTO> getContainers(List<String> nodeIps) throws Exception {
+        Long userId = AuthContext.getUserId();
+        if (userId == null) {
+            throw new RuntimeException("用户未登录，无法查询容器");
+        }
 
+        // 1. 获取用户有权限的所有节点
+        List<AgentIpPortDTO> agents = agentMapper.findAgentsByUserId(userId);
+        if (agents.isEmpty()) {
+            throw new RuntimeException("没有可用 agent");
+        }
+
+        List<ContainerInfoDTO> result = new ArrayList<>();
+
+        // 2. 前端传了节点列表 → 只查这些节点
+        if (nodeIps != null && !nodeIps.isEmpty()) {
+            for (String ip : nodeIps) {
+                Optional<AgentIpPortDTO> agent = agents.stream()
+                        .filter(a -> ip.equals(a.getIp()))
+                        .findFirst();
+                if (agent.isPresent()) {
+                    fetchContainersFromAgent(agent.get(), result);
+                }
+            }
+            return result;
+        }
+
+        // 3. 没传 → 查全部
+        for (AgentIpPortDTO agent : agents) {
+            try {
+                fetchContainersFromAgent(agent, result);
+            } catch (Exception e) {
+                log.error("节点 {} 查询失败", agent.getIp(), e);
+            }
+        }
+
+        return result;
+    }
+
+    /**
+     * 抽取公共方法：从单个 agent 获取容器
+     */
+    private void fetchContainersFromAgent(AgentIpPortDTO agent, List<ContainerInfoDTO> result) throws Exception {
+        String agentIp = agent.getIp();
+        String agentUrl = "http://" + agentIp + ":" + agent.getPort();
+        String path = "/containers";
+
+        HttpHeaders headers = new HttpHeaders();
+        signer.sign(HttpMethod.GET, path, "", headers);
+        HttpEntity<Void> entity = new HttpEntity<>(headers);
+
+        ResponseEntity<String> response = restTemplate.exchange(
+                agentUrl + path,
+                HttpMethod.GET,
+                entity,
+                String.class
+        );
+
+        List<ContainerInfoDTO> containers = objectMapper.readValue(
+                response.getBody(),
+                new TypeReference<List<ContainerInfoDTO>>() {}
+        );
+
+        // 注入 nodeIp
+        for (ContainerInfoDTO c : containers) {
+            c.setNodeIp(agentIp);
+        }
+
+        result.addAll(containers);
+        log.info("节点 {} 容器查询成功，数量：{}", agentIp, containers.size());
+    }
 }

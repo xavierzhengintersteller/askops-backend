@@ -1,11 +1,17 @@
 package com.scb.askopt_backend.controller;
 
+import com.scb.askopt_backend.dto.AgentIpPortDTO;
 import com.scb.askopt_backend.dto.agent.*;
+import com.scb.askopt_backend.mapper.AgentMapper;
+import com.scb.askopt_backend.security.AuthContext;
 import com.scb.askopt_backend.service.AgentService;
 import com.scb.askopt_backend.vo.ApiResponse;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.Collections;
+import java.util.List;
 
 /**
  * Agent 管理API控制器
@@ -15,7 +21,8 @@ import org.springframework.web.bind.annotation.*;
 public class AgentController {
     @Autowired
     private AgentService agentService;
-
+    @Autowired
+    private AgentMapper agentMapper;
     /**
      * Agent 心跳接口
      * Get /api/agent/health
@@ -37,5 +44,13 @@ public class AgentController {
         AgentRegisterResponse registerResponse  = agentService.register(request);
         return ApiResponse.success(registerResponse );
     }
-
+    @GetMapping("/nodes")
+    public ApiResponse<List<AgentIpPortDTO>> getCurrentUserNodes() {
+        Long userId = AuthContext.getUserId();
+        if (userId == null) {
+            return ApiResponse.error(401,"用户未登录");
+        }
+        List<AgentIpPortDTO> list = agentMapper.findAgentsByUserId(userId);
+        return ApiResponse.success(list);
+    }
 }

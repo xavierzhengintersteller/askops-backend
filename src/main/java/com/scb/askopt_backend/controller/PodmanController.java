@@ -66,9 +66,11 @@ public class PodmanController {
         return podmanService.batchRestartContainers(request);
     }
     @GetMapping("containers")
-    public ApiResponse<List<ContainerInfoDTO>> getAllContainer() {
+    public ApiResponse<List<ContainerInfoDTO>> getContainers(
+            @RequestParam(required = false) List<String> nodeIps  // 👈 改成 List
+    ) {
         try {
-            List<ContainerInfoDTO> containers = podmanService.getAllContainer();
+            List<ContainerInfoDTO> containers = podmanService.getContainers(nodeIps);
             return ApiResponse.success(containers);
         } catch (Exception e) {
             return ApiResponse.error(500, e.getMessage());
