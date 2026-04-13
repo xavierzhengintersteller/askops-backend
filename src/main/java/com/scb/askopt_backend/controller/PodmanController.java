@@ -67,14 +67,11 @@ public class PodmanController {
     }
     @GetMapping("containers")
     public ApiResponse<List<ContainerInfoDTO>> getContainers(
-            @RequestParam(required = false) List<String> nodeIps  // 👈 改成 List
+            @RequestParam(required = false) List<String> nodeIps,  // 👈 改成 List
+            @RequestParam(defaultValue = "false") boolean manual
     ) {
-        try {
-            List<ContainerInfoDTO> containers = podmanService.getContainers(nodeIps);
+            List<ContainerInfoDTO> containers = podmanService.getContainers(nodeIps,manual);
             return ApiResponse.success(containers);
-        } catch (Exception e) {
-            return ApiResponse.error(500, e.getMessage());
-        }
     }
 
 }
