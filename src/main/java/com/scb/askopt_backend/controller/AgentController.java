@@ -2,6 +2,7 @@ package com.scb.askopt_backend.controller;
 
 import com.scb.askopt_backend.dto.AgentIpPortDTO;
 import com.scb.askopt_backend.dto.agent.*;
+import com.scb.askopt_backend.exception.ResultCodeEnum;
 import com.scb.askopt_backend.mapper.AgentMapper;
 import com.scb.askopt_backend.security.AuthContext;
 import com.scb.askopt_backend.service.AgentService;
@@ -47,10 +48,16 @@ public class AgentController {
     @GetMapping("/nodes")
     public ApiResponse<List<AgentIpPortDTO>> getCurrentUserNodes() {
         Long userId = AuthContext.getUserId();
-        if (userId == null) {
-            return ApiResponse.error(401,"用户未登录");
-        }
         List<AgentIpPortDTO> list = agentMapper.findAgentsByUserId(userId);
+
+        // 👇 这里加判断：空列表 → 返回 100001 错误码
+        if (list == null || list.isEmpty()) {
+            return ApiResponse.error(
+                    ResultCodeEnum.NO_AGENT.getCode(),
+                    ResultCodeEnum.NO_AGENT.getMessage()
+            );
+        }
+
         return ApiResponse.success(list);
     }
 }

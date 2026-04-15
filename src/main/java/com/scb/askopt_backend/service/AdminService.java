@@ -7,27 +7,36 @@ import com.scb.askopt_backend.dto.admin.AssignPermissionToRoleDTO;
 import com.scb.askopt_backend.dto.admin.AssignRoleDTO;
 import com.scb.askopt_backend.dto.admin.AssignRoleGroupDTO;
 import com.scb.askopt_backend.dto.admin.UserPageDTO;
+import com.scb.askopt_backend.entity.SysPermission;
 import com.scb.askopt_backend.entity.SysRole;
 import com.scb.askopt_backend.entity.SysUser;
 import com.scb.askopt_backend.mapper.AdminMapper;
+import com.scb.askopt_backend.mapper.PermissionMapper;
 import com.scb.askopt_backend.mapper.RoleMapper;
 import com.scb.askopt_backend.mapper.UserMapper;
 import com.scb.askopt_backend.vo.GroupVO;
+import com.scb.askopt_backend.vo.PermissionTreeVO;
 import com.scb.askopt_backend.vo.UserPageVO;
 import com.scb.askopt_backend.vo.UserWithRolesVO;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.BeanUtils;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.stream.Collectors;
 
 @Service
-@RequiredArgsConstructor
 public class AdminService extends ServiceImpl<UserMapper, SysUser> {
-
-    private final UserMapper userMapper;
-    private final RoleMapper roleMapper;
-    private final AdminMapper adminMapper;
+    @Autowired
+    private UserMapper userMapper;
+    @Autowired
+    private RoleMapper roleMapper;
+    @Autowired
+    private AdminMapper adminMapper;
+    @Autowired
+    private PermissionMapper permissionMapper;
     /**
      * 查询用户列表（带角色）
      */
@@ -152,6 +161,27 @@ public class AdminService extends ServiceImpl<UserMapper, SysUser> {
     public void clearRoleGroups(Long roleId) {
         roleMapper.deleteRoleGroups(roleId);
     }
+    // ==================== 权限树（核心修复） ====================
+    public List<PermissionTreeVO> getPermissionTree() {
+        // 从 PermissionMapper 查询所有权限
+        List<SysPermission> allPermissions = permissionMapper.selectList(null);
 
+        List<PermissionTreeVO> allVos = allPermissions.stream().map(p -> {
+            PermissionTreeVO vo = new PermissionTreeVO();
+            BeanUtils.copyProperties(p, vo);
+            return vo;
+        }).collect(Collectors.toList());
 
+        return allVos.stream()
+                .filter(vo -> vo.getParentId() == null || vo.getParentId() == 0)
+                .peek(vo -> vo.setChildren(buildChildren(vo, allVos)))
+                .collect(Collectors.toList());
+    }
+
+    private List<PermissionTreeVO> buildChildren(PermissionTreeVO parent, List<PermissionTreeVO> all) {
+        return all.stream()
+                .filter(vo -> parent.getId().equals(vo.getParentId()))
+                .peek(vo -> vo.setChildren(buildChildren(vo, all)))
+                .collect(Collectors.toList());
+    }
 }

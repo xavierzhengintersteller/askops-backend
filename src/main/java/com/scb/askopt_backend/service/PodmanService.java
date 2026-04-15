@@ -54,8 +54,8 @@ public class PodmanService {
     @Autowired
     private RedisUtil redisUtil;
 
-    private static final int EXPIRE = 30; // 缓存30秒
-    private static final int PRELOAD_DELAY = 20000; // 20秒
+    private static final int EXPIRE = 25; // 缓存25秒
+    private static final int PRELOAD_DELAY = 25000; // 25秒
 
     // ===================== 对外接口：支持 manual 强制刷新 =====================
     public List<ContainerInfoDTO> getContainers(List<String> nodeIps, boolean manual) {

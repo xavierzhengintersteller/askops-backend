@@ -9,10 +9,7 @@ import com.scb.askopt_backend.entity.SysRole;
 import com.scb.askopt_backend.security.AuthContext;
 import com.scb.askopt_backend.service.AdminService;
 import com.scb.askopt_backend.service.PermissionService;
-import com.scb.askopt_backend.vo.ApiResponse;
-import com.scb.askopt_backend.vo.GroupVO;
-import com.scb.askopt_backend.vo.UserPageVO;
-import com.scb.askopt_backend.vo.UserWithRolesVO;
+import com.scb.askopt_backend.vo.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
@@ -27,10 +24,6 @@ public class AdminController {
 
     @Autowired
     private AdminService adminService;
-
-    @Autowired
-    private PermissionService permissionService;
-
     /**
      * 查询用户列表（带角色）
      * GET /api/users
@@ -40,37 +33,6 @@ public class AdminController {
         List<UserWithRolesVO> users = adminService.getUsersWithRoles();
         return ApiResponse.success(users);
     }
-
-//    /**
-//     * 给用户分配角色
-//     * POST /api/users/{id}/roles
-//     */
-//    @PostMapping("/users/{id}/roles")
-//    public ApiResponse<String> assignRolesToUser(@PathVariable Long id, @RequestBody List<Long> roleIds) {
-//        userService.assignRolesToUser(id, roleIds);
-//        return ApiResponse.success("角色分配成功");
-//    }
-
-//    /**
-//     * 查询角色（带权限）
-//     * GET /api/roles
-//     */
-//    @GetMapping("/roles")
-//    public ApiResponse<List<SysRole>> getRolesWithPermissions() {
-//        List<SysRole> roles = roleService.getRolesWithPermissions();
-//        return ApiResponse.success(roles);
-//    }
-//
-//    /**
-//     * 给角色分配权限
-//     * POST /api/roles/{id}/permissions
-//     */
-//    @PostMapping("/roles/{id}/permissions")
-//    public ApiResponse<String> assignPermissionsToRole(@PathVariable Long id, @RequestBody List<Long> permissionIds) {
-//        roleService.assignPermissionsToRole(id, permissionIds);
-//        return ApiResponse.success("权限分配成功");
-//    }
-
     /**
      * 分页查询用户列表
      */
@@ -172,5 +134,15 @@ public class AdminController {
         }
         adminService.clearRoleGroups(roleId);
         return ApiResponse.success();
+    }
+    /**
+     * 获取权限树（给前端权限管理页面使用）
+     */
+    @GetMapping("/permission/list")
+    public ApiResponse<List<PermissionTreeVO>> permissionTree() {
+        if (!AuthContext.isSuperAdmin()) {
+            return ApiResponse.error(403, "仅超级管理员可访问");
+        }
+        return ApiResponse.success(adminService.getPermissionTree());
     }
 }
