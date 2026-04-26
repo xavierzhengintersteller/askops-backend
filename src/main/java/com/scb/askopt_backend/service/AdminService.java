@@ -1,19 +1,18 @@
 package com.scb.askopt_backend.service;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
-import com.scb.askopt_backend.dto.admin.AssignPermissionToRoleDTO;
-import com.scb.askopt_backend.dto.admin.AssignRoleDTO;
-import com.scb.askopt_backend.dto.admin.AssignRoleGroupDTO;
-import com.scb.askopt_backend.dto.admin.UserPageDTO;
+import com.scb.askopt_backend.dto.admin.*;
 import com.scb.askopt_backend.entity.SysPermission;
 import com.scb.askopt_backend.entity.SysRole;
 import com.scb.askopt_backend.entity.SysUser;
-import com.scb.askopt_backend.mapper.AdminMapper;
-import com.scb.askopt_backend.mapper.PermissionMapper;
-import com.scb.askopt_backend.mapper.RoleMapper;
-import com.scb.askopt_backend.mapper.UserMapper;
+import com.scb.askopt_backend.entity.UserRoleMapping;
+import com.scb.askopt_backend.exception.ApiException;
+import com.scb.askopt_backend.exception.GlobalExceptionHandler;
+import com.scb.askopt_backend.exception.ResultCodeEnum;
+import com.scb.askopt_backend.mapper.*;
 import com.scb.askopt_backend.vo.GroupVO;
 import com.scb.askopt_backend.vo.PermissionTreeVO;
 import com.scb.askopt_backend.vo.UserPageVO;
@@ -21,6 +20,7 @@ import com.scb.askopt_backend.vo.UserWithRolesVO;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -37,6 +37,11 @@ public class AdminService extends ServiceImpl<UserMapper, SysUser> {
     private AdminMapper adminMapper;
     @Autowired
     private PermissionMapper permissionMapper;
+    @Autowired
+    private PasswordEncoder passwordEncoder;
+    @Autowired
+    private UserRoleMappingMapper userRoleMappingMapper;
+
     /**
      * 查询用户列表（带角色）
      */
@@ -57,7 +62,7 @@ public class AdminService extends ServiceImpl<UserMapper, SysUser> {
             UserPageVO vo = new UserPageVO();
             vo.setUserId(userId);
             vo.setUsername(user.getUsername());
-            vo.setRoleIds(userMapper.selectRoleIdsByUserId(userId));
+            vo.setRoleNames(userMapper.selectRoleNamesByUserId(userId));
             vo.setGroups(userMapper.selectGroupsByUserId(userId));
             vo.setAgents(userMapper.selectAgentsByUserId(userId));
 
@@ -71,6 +76,26 @@ public class AdminService extends ServiceImpl<UserMapper, SysUser> {
         result.setRecords(records);
         return result;
     }
+    // 全量用户列表（无分页、无筛选、无DTO）
+    public List<UserPageVO> userList() {
+        // 查所有用户
+        List<SysUser> userList = lambdaQuery().list();
+
+        // 组装VO
+        return userList.stream().map(user -> {
+            Long userId = user.getId();
+
+            UserPageVO vo = new UserPageVO();
+            vo.setUserId(userId);
+            vo.setUsername(user.getUsername());
+            vo.setEnabled(user.getEnabled());
+            vo.setRoleNames(userMapper.selectRoleNamesByUserId(userId));
+            vo.setGroups(userMapper.selectGroupsByUserId(userId));
+            vo.setAgents(userMapper.selectAgentsByUserId(userId));
+
+            return vo;
+        }).toList();
+    }
 
     // 查询用户详情 + 角色IDS + 组 + AGENT（全部统一）
     public UserPageVO getUserDetail(Long userId) {
@@ -79,7 +104,7 @@ public class AdminService extends ServiceImpl<UserMapper, SysUser> {
         UserPageVO vo = new UserPageVO();
         vo.setUserId(user.getId());
         vo.setUsername(user.getUsername());
-        vo.setRoleIds(userMapper.selectRoleIdsByUserId(userId));
+        vo.setRoleNames(userMapper.selectRoleNamesByUserId(userId));
         vo.setGroups(userMapper.selectGroupsByUserId(userId));
         vo.setAgents(userMapper.selectAgentsByUserId(userId));
 
@@ -183,5 +208,67 @@ public class AdminService extends ServiceImpl<UserMapper, SysUser> {
                 .filter(vo -> parent.getId().equals(vo.getParentId()))
                 .peek(vo -> vo.setChildren(buildChildren(vo, all)))
                 .collect(Collectors.toList());
+    }
+
+    @Transactional(rollbackFor = Exception.class)
+    public void addUser(AddUserDTO dto) {
+        // 1. 新建用户
+        SysUser user = new SysUser();
+        user.setUsername(dto.getUsername());
+        user.setPassword(passwordEncoder.encode(dto.getPassword())); // 正式项目记得加密 BCrypt
+        user.setEnabled(true);
+        save(user); // 保存后 user.getId() 才有值
+
+        // 2. 分配角色（你已有的方法复用）
+        AssignRoleDTO assignRoleDTO = new AssignRoleDTO();
+        assignRoleDTO.setUserId(user.getId());
+        assignRoleDTO.setRoleIds(dto.getRoleIds());
+        assignRolesToUser(assignRoleDTO); // 复用你原来的分配逻辑
+    }
+
+    @Transactional
+    public void updateUserStatus(BlacklistUserDTO dto) {
+        SysUser user = getById(dto.getUserId());
+
+        // admin 直接不执行，不抛异常
+        if (user != null && "admin".equals(user.getUsername())) {
+            return;
+        }
+
+        lambdaUpdate()
+                .eq(SysUser::getId, dto.getUserId())
+                .set(SysUser::getEnabled, dto.getEnabled())
+                .update();
+    }
+
+    @Transactional
+    public void deleteUser(Long userId) {
+        SysUser user = getById(userId);
+
+        // admin 不允许删，直接 return
+        if (user != null && "admin".equals(user.getUsername())) {
+            return;
+        }
+
+        userRoleMappingMapper.delete(
+                new LambdaQueryWrapper<UserRoleMapping>()
+                        .eq(UserRoleMapping::getUserId, userId)
+        );
+        this.removeById(userId);
+    }
+
+    @Transactional(rollbackFor = Exception.class)
+    public void updatePassword(UpdateUserPwdDTO dto) {
+        SysUser user = getById(dto.getUserId());
+
+        // admin 不允许改密，直接 return
+        if (user != null && "admin".equals(user.getUsername())) {
+            return;
+        }
+
+        lambdaUpdate()
+                .eq(SysUser::getId, dto.getUserId())
+                .set(SysUser::getPassword, passwordEncoder.encode(dto.getNewPassword()))
+                .update();
     }
 }

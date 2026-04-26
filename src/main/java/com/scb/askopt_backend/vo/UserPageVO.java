@@ -8,7 +8,8 @@ import java.util.List;
 public class UserPageVO {
     private Long userId;
     private String username;
-    private List<Long> roleIds;       // 角色ID
+    private Boolean enabled;
+    private List<String> roleNames;       // 角色ID
     // 可访问组
     private List<GroupVO> groups;
     // 可访问Agent（含IP）

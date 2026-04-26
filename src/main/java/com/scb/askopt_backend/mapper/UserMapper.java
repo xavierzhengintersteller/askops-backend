@@ -99,7 +99,13 @@ public interface UserMapper extends BaseMapper<SysUser> {
     // 查询用户拥有的角色IDS
     @Select("SELECT role_id FROM askops_schema.user_role_mapping WHERE user_id = #{userId}")
     List<Long> selectRoleIdsByUserId(@Param("userId") Long userId);
-
+    @Select("""
+    SELECT r.role_name
+    FROM askops_schema.user_role_mapping m
+    JOIN askops_schema.sys_role r ON m.role_id = r.id
+    WHERE m.user_id = #{userId}
+    """)
+    List<String> selectRoleNamesByUserId(@Param("userId") Long userId);
     // 删除用户旧角色
     @Delete("DELETE FROM askops_schema.user_role_mapping WHERE user_id = #{userId}")
     void deleteUserRoles(@Param("userId") Long userId);

@@ -2,7 +2,9 @@ package com.scb.askopt_backend.service;
 
 import com.scb.askopt_backend.config.RedisUtil;
 import com.scb.askopt_backend.entity.SysUser;
+import com.scb.askopt_backend.exception.ApiException;
 import com.scb.askopt_backend.exception.GlobalExceptionHandler;
+import com.scb.askopt_backend.exception.ResultCodeEnum;
 import com.scb.askopt_backend.mapper.PermissionMapper;
 import com.scb.askopt_backend.mapper.UserMapper;
 import com.scb.askopt_backend.security.AuthUser;
@@ -45,8 +47,14 @@ public class AuthService {
     public AuthUser login(String username, String password) {
         // 1. 验证用户
         SysUser user = userMapper.findByUsername(username);
+        // 账号禁用 → 登录异常 401
+        if (user != null && !Boolean.TRUE.equals(user.getEnabled())) {
+            throw new GlobalExceptionHandler.LoginException(ResultCodeEnum.USER_DISABLED);
+        }
+
+        // 用户名/密码错误
         if (user == null || !passwordEncoder.matches(password, user.getPassword())) {
-            throw new GlobalExceptionHandler.LoginException("用户名或密码错误");
+            throw new GlobalExceptionHandler.LoginException(ResultCodeEnum.LOGIN_ERROR);
         }
 
         Long userId = user.getId();
@@ -87,24 +95,24 @@ public class AuthService {
     // ====================== ✅ 刷新Token：只返回新的 accessToken ======================
     public String refreshAccessToken(String refreshToken) {
         if (refreshToken == null || refreshToken.isBlank()) {
-            throw new GlobalExceptionHandler.LoginException("refreshToken 不能为空");
+            throw new GlobalExceptionHandler.LoginException(ResultCodeEnum.TOKEN_EMPTY);
         }
 
         String refreshKey = "refresh:" + refreshToken;
-        Long userId = redisUtil.getLong(refreshKey); // 直接获取 Long！
+        Long userId = redisUtil.getLong(refreshKey);
 
         if (userId == null) {
-            throw new GlobalExceptionHandler.LoginException("refreshToken 无效或已过期");
+            throw new GlobalExceptionHandler.LoginException(ResultCodeEnum.TOKEN_INVALID);
         }
 
         SysUser user = userMapper.findByUserId(userId);
         if (user == null) {
-            throw new GlobalExceptionHandler.LoginException("用户不存在");
+            throw new GlobalExceptionHandler.LoginException(ResultCodeEnum.USER_NOT_EXIST);
         }
 
         Long permissionVersion = redisUtil.getLong("auth:ver:" + userId);
         if (permissionVersion == null) {
-            throw new GlobalExceptionHandler.LoginException("会话已失效");
+            throw new GlobalExceptionHandler.LoginException(ResultCodeEnum.SESSION_EXPIRED);
         }
 
         AuthUser authUser = new AuthUser();

@@ -1,10 +1,7 @@
 package com.scb.askopt_backend.controller;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
-import com.scb.askopt_backend.dto.admin.AssignPermissionToRoleDTO;
-import com.scb.askopt_backend.dto.admin.AssignRoleDTO;
-import com.scb.askopt_backend.dto.admin.AssignRoleGroupDTO;
-import com.scb.askopt_backend.dto.admin.UserPageDTO;
+import com.scb.askopt_backend.dto.admin.*;
 import com.scb.askopt_backend.entity.SysRole;
 import com.scb.askopt_backend.security.AuthContext;
 import com.scb.askopt_backend.service.AdminService;
@@ -33,15 +30,12 @@ public class AdminController {
         List<UserWithRolesVO> users = adminService.getUsersWithRoles();
         return ApiResponse.success(users);
     }
-    /**
-     * 分页查询用户列表
-     */
-    @GetMapping("/user/page")
-    public ApiResponse<IPage<UserPageVO>> page(UserPageDTO dto) {
+    @GetMapping("/user/list")
+    public ApiResponse<List<UserPageVO>> list() {
         if (!AuthContext.isSuperAdmin()) {
             return ApiResponse.error(403, "仅超级管理员可访问");
         }
-        return ApiResponse.success(adminService.pageUser(dto));
+        return ApiResponse.success(adminService.userList());
     }
 
     /**
@@ -144,5 +138,29 @@ public class AdminController {
             return ApiResponse.error(403, "仅超级管理员可访问");
         }
         return ApiResponse.success(adminService.getPermissionTree());
+    }
+
+    @PostMapping("/user/add")
+    public ApiResponse<Void> addUser(@RequestBody AddUserDTO dto) {
+        if (!AuthContext.isSuperAdmin()) {
+            return ApiResponse.error(403, "仅超管可操作");
+        }
+        adminService.addUser(dto);
+        return ApiResponse.success();
+    }
+    @PostMapping("/user/blacklist")
+    public ApiResponse<Void> blacklistUser(@RequestBody BlacklistUserDTO dto) {
+        adminService.updateUserStatus(dto);
+        return ApiResponse.success();
+    }
+    @PostMapping("/user/delete/{id}")
+    public ApiResponse<Void> deleteUser(@PathVariable Long id) {
+        adminService.deleteUser(id);
+        return ApiResponse.success();
+    }
+    @PostMapping("/user/update-password")
+    public ApiResponse<Void> updatePassword(@RequestBody UpdateUserPwdDTO dto) {
+        adminService.updatePassword(dto);
+        return ApiResponse.success();
     }
 }
