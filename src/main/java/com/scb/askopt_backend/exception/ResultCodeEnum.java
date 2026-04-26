@@ -18,7 +18,11 @@ public enum ResultCodeEnum {
     SESSION_EXPIRED(401, "会话已失效"),
     NOT_ALLOW_CHANGE_ADMIN_STATUS(100003, "不允许修改管理员状态"),
     NOT_ALLOW_DELETE_ADMIN(100004, "不允许删除管理员"),
-    NOT_ALLOW_CHANGE_ADMIN_PWD(100005, "不允许修改管理员密码");
+    NOT_ALLOW_CHANGE_ADMIN_PWD(100005, "不允许修改管理员密码"),
+    Role_NOTEXIST(100006, "角色不存在"),
+    PERMISSION_NOTEXIST(100007, "权限不存在"),
+    USER_ALREADY_EXIST(100008, "用户已存在"),
+    VALUE_ALREADY_EXIST(100009, "值已存在");
     private final int code;
     private final String message;
 }
