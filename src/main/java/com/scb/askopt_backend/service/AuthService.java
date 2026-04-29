@@ -7,6 +7,7 @@ import com.scb.askopt_backend.exception.GlobalExceptionHandler;
 import com.scb.askopt_backend.exception.ResultCodeEnum;
 import com.scb.askopt_backend.mapper.PermissionMapper;
 import com.scb.askopt_backend.mapper.UserMapper;
+import com.scb.askopt_backend.security.AuthContext;
 import com.scb.askopt_backend.security.AuthUser;
 import com.scb.askopt_backend.security.JwtUtil;
 import lombok.extern.slf4j.Slf4j;
@@ -93,6 +94,7 @@ public class AuthService {
     }
 
     // ====================== ✅ 刷新Token：只返回新的 accessToken ======================
+// ====================== ✅ 刷新 Token（单一职责）======================
     public String refreshAccessToken(String refreshToken) {
         if (refreshToken == null || refreshToken.isBlank()) {
             throw new GlobalExceptionHandler.LoginException(ResultCodeEnum.TOKEN_EMPTY);
@@ -105,21 +107,16 @@ public class AuthService {
             throw new GlobalExceptionHandler.LoginException(ResultCodeEnum.TOKEN_INVALID);
         }
 
-        SysUser user = userMapper.findByUserId(userId);
-        if (user == null) {
-            throw new GlobalExceptionHandler.LoginException(ResultCodeEnum.USER_NOT_EXIST);
-        }
-
-        Long permissionVersion = redisUtil.getLong("auth:ver:" + userId);
-        if (permissionVersion == null) {
-            throw new GlobalExceptionHandler.LoginException(ResultCodeEnum.SESSION_EXPIRED);
-        }
+        // ==============================================
+        // 🔥 🔥 🔥 全部来自 ThreadLocal（前端旧token带来的值）
+        // ==============================================
+        Long Version = AuthContext.getPermissionVersion();
+        boolean isSuperAdmin = AuthContext.isSuperAdmin();
 
         AuthUser authUser = new AuthUser();
         authUser.setUserId(userId);
-        authUser.setUsername(user.getUsername());
-        authUser.setSuperAdmin(userMapper.isSuperAdmin(userId));
-        authUser.setPermissionVersion(permissionVersion);
+        authUser.setSuperAdmin(isSuperAdmin);
+        authUser.setPermissionVersion(Version);
 
         return jwtUtil.generateToken(authUser, ACCESS_TOKEN_EXPIRE_MS);
     }

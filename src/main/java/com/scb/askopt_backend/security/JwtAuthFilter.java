@@ -77,11 +77,12 @@ public class JwtAuthFilter implements Filter {
         }
 
         // ==============================================
-        // 🔥 超级管理员 → 直接放行（纯手动实现）
+        // 超级管理员 → 直接放行
         // ==============================================
         if (superAdmin) {
             AuthContext.setUserId(userId);
-            AuthContext.setSuperAdmin(true); // 手动设置
+            AuthContext.setPermissionVersion(tokenVersion);
+            AuthContext.setSuperAdmin(true);
             try {
                 chain.doFilter(request, response);
             } finally {
@@ -103,7 +104,7 @@ public class JwtAuthFilter implements Filter {
             return;
         }
 
-// 6. 权限校验
+        // 6. 权限校验
         Object permObj = redisUtil.get("auth:perm:" + userId);
         if (permObj == null) {
             forbidden(resp, "no permissions");
@@ -113,9 +114,6 @@ public class JwtAuthFilter implements Filter {
         Set<Long> permissionIds = safeConvertToLongSet(permObj);
         String requiredPermIdStr = permissionMatcher.match(path, method);
 
-// ==============================================
-// 🔥 安全加固：没有配置权限 → 直接拒绝，绝不放行
-// ==============================================
         if (requiredPermIdStr == null) {
             log.warn("⚠️ 未配置权限的接口被访问：{} {}", method, path);
             forbidden(resp, "no permission config");
@@ -133,8 +131,9 @@ public class JwtAuthFilter implements Filter {
             return;
         }
 
-        // 7. 放行
+        // 7. 放行前存入 ThreadLocal
         AuthContext.setUserId(userId);
+        AuthContext.setPermissionVersion(tokenVersion);
         AuthContext.setSuperAdmin(false);
         try {
             chain.doFilter(request, response);

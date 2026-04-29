@@ -19,8 +19,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.Collections;
-import java.util.List;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @Service
@@ -187,12 +186,39 @@ public class AdminService extends ServiceImpl<UserMapper, SysUser> {
         Long roleId = dto.getRoleId();
         List<Long> permissionIds = dto.getPermissionIds();
 
-        // 1. 删除旧关系
-        roleMapper.deleteRolePermissions(roleId);
+        // ==========================
+        // 1. 删除该角色所有旧权限（MP 写法）
+        // ==========================
+        LambdaQueryWrapper<RolePermissionMapping> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(RolePermissionMapping::getRoleId, roleId);
+        rolePermissionMappingMapper.delete(wrapper);
 
-        // 2. 批量插入新关系
-        if (permissionIds != null && !permissionIds.isEmpty()) {
-            roleMapper.batchInsertRolePermissions(roleId, permissionIds);
+        // ==========================
+        // 2. 空值直接返回
+        // ==========================
+        if (permissionIds == null || permissionIds.isEmpty()) {
+            return;
+        }
+
+        // ==========================
+        // 3. 去重（防止前端传重复ID）
+        // ==========================
+        Set<Long> uniqueSet = new HashSet<>(permissionIds);
+
+        // ==========================
+        // 4. 批量插入新权限（MP）
+        // ==========================
+        List<RolePermissionMapping> list = new ArrayList<>();
+        for (Long permId : uniqueSet) {
+            RolePermissionMapping mapping = new RolePermissionMapping();
+            mapping.setRoleId(roleId);
+            mapping.setPermissionId(permId);
+            list.add(mapping);
+        }
+
+        // 批量插入（MyBatis-Plus 官方推荐）
+        for (RolePermissionMapping mapping : list) {
+            rolePermissionMappingMapper.insert(mapping);
         }
     }
     /**
