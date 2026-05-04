@@ -2,7 +2,6 @@ package com.scb.askopt_backend.service;
 
 import com.scb.askopt_backend.config.RedisUtil;
 import com.scb.askopt_backend.entity.SysUser;
-import com.scb.askopt_backend.exception.ApiException;
 import com.scb.askopt_backend.exception.GlobalExceptionHandler;
 import com.scb.askopt_backend.exception.ResultCodeEnum;
 import com.scb.askopt_backend.mapper.PermissionMapper;
@@ -10,6 +9,7 @@ import com.scb.askopt_backend.mapper.UserMapper;
 import com.scb.askopt_backend.security.AuthContext;
 import com.scb.askopt_backend.security.AuthUser;
 import com.scb.askopt_backend.security.JwtUtil;
+import com.scb.askopt_backend.vo.LoginVO;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.RedisTemplate;
@@ -44,8 +44,8 @@ public class AuthService {
     private static final long ACCESS_TOKEN_EXPIRE_MS = 15 * 60_000L;         // 15分钟
     private static final long REFRESH_TOKEN_EXPIRE_SEC = 7 * 24 * 60 * 60L;   // 7天
 
-    // ====================== 登录 ======================
-    public AuthUser login(String username, String password) {
+    // ====================== 登录：返回 LoginVO ======================
+    public LoginVO login(String username, String password) {
         // 1. 验证用户
         SysUser user = userMapper.findByUsername(username);
         // 账号禁用 → 登录异常 401
@@ -65,7 +65,6 @@ public class AuthService {
         // 3. 构建 AuthUser
         AuthUser authUser = new AuthUser();
         authUser.setUserId(user.getId());
-        authUser.setUsername(user.getUsername());
         authUser.setSuperAdmin(isSuperAdmin);
         authUser.setPermissionVersion(user.getPermissionVersion());
 
@@ -73,9 +72,49 @@ public class AuthService {
         Set<Long> permissionIds = getUserPermissionIds(userId);
         redisUtil.set("auth:perm:" + userId, permissionIds, REFRESH_TOKEN_EXPIRE_SEC);
 
-        // 5. 生成 token
-        generateAndCacheTokens(authUser);
-        return authUser;
+        // 5. 生成 token 并返回 LoginVO
+        return generateAndCacheTokens(authUser);
+    }
+
+    // ====================== ✅ 最终版：刷新 Token ======================
+    public String refreshAccessToken(String refreshToken) {
+        if (refreshToken == null || refreshToken.isBlank()) {
+            throw new GlobalExceptionHandler.LoginException(ResultCodeEnum.TOKEN_EMPTY);
+        }
+
+        String refreshKey = "refresh:" + refreshToken;
+        Long userId = redisUtil.getLong(refreshKey);
+
+        if (userId == null) {
+            throw new GlobalExceptionHandler.LoginException(ResultCodeEnum.TOKEN_INVALID);
+        }
+
+        // ==============================================
+        // 🔥 1. 从 Redis 读取最新 permissionVersion
+        // ==============================================
+        String versionKey = "auth:ver:" + userId;
+        Long permissionVersion = redisUtil.getLong(versionKey);
+
+        // 兜底：Redis 无值 → 查数据库最新版本
+        if (permissionVersion == null) {
+            SysUser user = userMapper.selectById(userId);
+            permissionVersion = user.getPermissionVersion();
+            redisUtil.set(versionKey, permissionVersion, REFRESH_TOKEN_EXPIRE_SEC);
+        }
+
+        // ==============================================
+        // 🔥 2. 构建带最新版本号的 AuthUser
+        // ==============================================
+        boolean isSuperAdmin = userMapper.isSuperAdmin(userId);
+        AuthUser authUser = new AuthUser();
+        authUser.setUserId(userId);
+        authUser.setSuperAdmin(isSuperAdmin);
+        authUser.setPermissionVersion(permissionVersion); // ✅ 最新版本必须放进去
+
+        // ==============================================
+        // 🔥 3. 生成新 accessToken（带最新版本）并返回
+        // ==============================================
+        return jwtUtil.generateToken(authUser, ACCESS_TOKEN_EXPIRE_MS);
     }
 
     // ====================== 获取用户权限ID ======================
@@ -93,47 +132,24 @@ public class AuthService {
         return permissionIds;
     }
 
-    // ====================== ✅ 刷新Token：只返回新的 accessToken ======================
-// ====================== ✅ 刷新 Token（单一职责）======================
-    public String refreshAccessToken(String refreshToken) {
-        if (refreshToken == null || refreshToken.isBlank()) {
-            throw new GlobalExceptionHandler.LoginException(ResultCodeEnum.TOKEN_EMPTY);
-        }
-
-        String refreshKey = "refresh:" + refreshToken;
-        Long userId = redisUtil.getLong(refreshKey);
-
-        if (userId == null) {
-            throw new GlobalExceptionHandler.LoginException(ResultCodeEnum.TOKEN_INVALID);
-        }
-
-        // ==============================================
-        // 🔥 🔥 🔥 全部来自 ThreadLocal（前端旧token带来的值）
-        // ==============================================
-        Long Version = AuthContext.getPermissionVersion();
-        boolean isSuperAdmin = AuthContext.isSuperAdmin();
-
-        AuthUser authUser = new AuthUser();
-        authUser.setUserId(userId);
-        authUser.setSuperAdmin(isSuperAdmin);
-        authUser.setPermissionVersion(Version);
-
-        return jwtUtil.generateToken(authUser, ACCESS_TOKEN_EXPIRE_MS);
-    }
-    // ====================== 生成并缓存Token（登录时使用） ======================
-    private void generateAndCacheTokens(AuthUser authUser) {
+    // ====================== 生成并缓存Token，返回LoginVO ======================
+    private LoginVO generateAndCacheTokens(AuthUser authUser) {
         Long userId = authUser.getUserId();
 
         // 生成 Token
         String accessToken = jwtUtil.generateToken(authUser, ACCESS_TOKEN_EXPIRE_MS);
         String refreshToken = UUID.randomUUID().toString();
 
-        authUser.setAccessToken(accessToken);
-        authUser.setRefreshToken(refreshToken);
+        // 封装返回VO
+        LoginVO loginVO = new LoginVO();
+        loginVO.setAccessToken(accessToken);
+        loginVO.setRefreshToken(refreshToken);
 
         // 缓存到 Redis
         redisUtil.set("auth:ver:" + userId, authUser.getPermissionVersion(), REFRESH_TOKEN_EXPIRE_SEC);
         redisUtil.set("refresh:" + refreshToken, userId, REFRESH_TOKEN_EXPIRE_SEC);
+
+        return loginVO;
     }
 
     // ====================== 登出 ======================

@@ -26,7 +26,7 @@ public class JwtAuthFilter implements Filter {
     private final ObjectMapper objectMapper;
 
     private static final String[] WHITELIST = {
-            "/api/auth/",
+            "/api/auth/**",
             "/swagger-ui/",
             "/v3/api-docs"
     };

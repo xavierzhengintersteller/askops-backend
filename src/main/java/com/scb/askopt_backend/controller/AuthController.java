@@ -4,10 +4,10 @@ import com.scb.askopt_backend.dto.LoginRequest;
 import com.scb.askopt_backend.entity.SysUser;
 import com.scb.askopt_backend.mapper.PermissionMapper;
 import com.scb.askopt_backend.mapper.UserMapper;
-import com.scb.askopt_backend.security.AuthUser;
 import com.scb.askopt_backend.security.JwtUtil;
 import com.scb.askopt_backend.service.AuthService;
 import com.scb.askopt_backend.vo.ApiResponse;
+import com.scb.askopt_backend.vo.LoginVO;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
@@ -30,13 +30,9 @@ public class AuthController {
     private AuthService authService;
 
     @PostMapping("/login")
-    public ApiResponse<AuthUser> login(@RequestBody LoginRequest request) {
-
-        AuthUser user = authService.login(
-                request.getUsername(),
-                request.getPassword());
-
-        return ApiResponse.success(user);
+    public ApiResponse<LoginVO> login(@RequestBody LoginRequest request) {
+        LoginVO loginVO = authService.login(request.getUsername(), request.getPassword());
+        return ApiResponse.success(loginVO);
     }
     @PostMapping("/register")
     public ApiResponse<String> register(@RequestBody LoginRequest request) {

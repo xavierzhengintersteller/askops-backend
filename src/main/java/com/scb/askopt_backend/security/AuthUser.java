@@ -7,10 +7,7 @@ import java.util.Set;
 @Data
 public class AuthUser {
     private Long userId;
-    private String username;
     private boolean superAdmin;
-    private String accessToken;   // 短期 JWT
-    private String refreshToken;  // 长期刷新 token
     private Long permissionVersion;
 }
 

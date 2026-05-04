@@ -48,4 +48,19 @@ public class GlobalExceptionHandler {
             this.code = codeEnum.getCode();
         }
     }
+    @Getter
+    public static class ApiException extends RuntimeException {
+        private final int code;
+
+        public ApiException(ResultCodeEnum codeEnum) {
+            super(codeEnum.getMessage());
+            this.code = codeEnum.getCode();
+        }
+
+        // 兼容你之前手动传 code + message
+        public ApiException(int code, String message) {
+            super(message);
+            this.code = code;
+        }
+    }
 }
