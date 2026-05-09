@@ -92,6 +92,7 @@ public class AdminService extends ServiceImpl<UserMapper, SysUser> {
             vo.setUsername(user.getUsername());
             vo.setEnabled(user.getEnabled());
             vo.setRoleNames(userMapper.selectRoleNamesByUserId(userId));
+            vo.setRoleIds(userMapper.selectRoleIdsByUserId(userId));
             vo.setGroups(userMapper.selectGroupsByUserId(userId));
             vo.setAgents(userMapper.selectAgentsByUserId(userId));
 
@@ -107,6 +108,7 @@ public class AdminService extends ServiceImpl<UserMapper, SysUser> {
         vo.setUserId(user.getId());
         vo.setUsername(user.getUsername());
         vo.setRoleNames(userMapper.selectRoleNamesByUserId(userId));
+        vo.setRoleIds(userMapper.selectRoleIdsByUserId(userId));
         vo.setGroups(userMapper.selectGroupsByUserId(userId));
         vo.setAgents(userMapper.selectAgentsByUserId(userId));
 

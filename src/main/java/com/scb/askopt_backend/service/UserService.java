@@ -1,18 +1,21 @@
 package com.scb.askopt_backend.service;
 
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.scb.askopt_backend.config.RedisUtil;
 import com.scb.askopt_backend.entity.SysUser;
 import com.scb.askopt_backend.mapper.UserMapper;
 import com.scb.askopt_backend.security.AuthContext;
 import com.scb.askopt_backend.vo.UserMenuVO;
 import com.scb.askopt_backend.vo.UserPermissionAndMenuVO;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import java.util.List;
 import java.util.stream.Collectors;
 
 @Service
 public class UserService extends ServiceImpl<UserMapper, SysUser> {
-
+    @Autowired
+    private  RedisUtil redisUtil;
     /**
      * 合并接口：菜单树 + 权限
      */
@@ -22,7 +25,7 @@ public class UserService extends ServiceImpl<UserMapper, SysUser> {
         // 🔥 直接从 ThreadLocal 获取是否超级管理员
         // ==============================================
         boolean isSuperAdmin = AuthContext.isSuperAdmin();
-
+        vo.setPermissionVersion( redisUtil.getLong("auth:ver:" + userId));
         if (isSuperAdmin) {
             // ✅ 超管 → 直接返回全量菜单 + 全权限
             vo.setLeftMenuTree(buildMenuTree(baseMapper.selectAllMenuList(), null));

@@ -39,6 +39,7 @@ public class AdminController {
 
     /**
      * 查询单个用户详情+角色IDS
+     *
      */
     @GetMapping("/user/{id}")
     public ApiResponse<UserPageVO> detail(@PathVariable Long id) {
@@ -56,7 +57,7 @@ public class AdminController {
     /**
      * 给用户分配角色
      */
-    @PutMapping("/user/assign-role")
+    @PostMapping("/user/assign-role")
     public ApiResponse<Void> assignRole(@RequestBody AssignRoleDTO dto) {
 
         adminService.assignRolesToUser(dto);

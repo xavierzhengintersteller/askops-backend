@@ -6,6 +6,7 @@ import java.util.Set;
 
 @Data
 public class UserPermissionAndMenuVO {
+    private Long permissionVersion;
     // 左侧菜单树
     private List<UserMenuVO> leftMenuTree;
     // 权限ID集合

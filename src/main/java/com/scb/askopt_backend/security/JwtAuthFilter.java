@@ -1,6 +1,7 @@
 package com.scb.askopt_backend.security;
 
 import com.scb.askopt_backend.config.RedisUtil;
+import com.scb.askopt_backend.constant.RedisConstants;
 import com.scb.askopt_backend.vo.ApiResponse;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.jsonwebtoken.Claims;
@@ -26,7 +27,9 @@ public class JwtAuthFilter implements Filter {
     private final ObjectMapper objectMapper;
 
     private static final String[] WHITELIST = {
-            "/api/auth/**",
+            "/api/auth/login",
+            "/api/auth/logout",
+            "/api/auth/token/refresh",
             "/swagger-ui/",
             "/v3/api-docs"
     };
@@ -69,8 +72,13 @@ public class JwtAuthFilter implements Filter {
         // 4. 从 Token 读取用户信息
         Long userId = getLongClaim(claims, "uid");
         Long tokenVersion = getLongClaim(claims, "ver");
-        boolean superAdmin = Boolean.TRUE.equals(claims.get("superAdmin", Boolean.class));
-
+        boolean superAdmin = Boolean.TRUE.equals(claims.getOrDefault("superAdmin", false));
+        // ========== 黑名单校验 ==========
+        String blackKey = RedisConstants.REDIS_BLACKLIST_USER + userId;
+        if (redisUtil.hasKey(blackKey)) {
+            unauthorized(resp, "user disabled or forced offline");
+            return;
+        }
         if (userId == null || tokenVersion == null) {
             unauthorized(resp, "invalid token payload");
             return;

@@ -1,6 +1,7 @@
 package com.scb.askopt_backend.service;
 
 import com.scb.askopt_backend.config.RedisUtil;
+import com.scb.askopt_backend.constant.RedisConstants;
 import com.scb.askopt_backend.entity.SysUser;
 import com.scb.askopt_backend.exception.GlobalExceptionHandler;
 import com.scb.askopt_backend.exception.ResultCodeEnum;
@@ -41,8 +42,8 @@ public class AuthService {
     private RedisTemplate<String, Object> redisTemplate;
 
     // 配置常量
-    private static final long ACCESS_TOKEN_EXPIRE_MS = 15 * 60_000L;         // 15分钟
-    private static final long REFRESH_TOKEN_EXPIRE_SEC = 7 * 24 * 60 * 60L;   // 7天
+    private static final long ACCESS_TOKEN_EXPIRE_MS = RedisConstants.ACCESS_TOKEN_EXPIRE_MS;
+    private static final long REFRESH_TOKEN_EXPIRE_SEC = RedisConstants.REFRESH_TOKEN_EXPIRE_SEC;
 
     // ====================== 登录：返回 LoginVO ======================
     public LoginVO login(String username, String password) {
@@ -76,7 +77,7 @@ public class AuthService {
         return generateAndCacheTokens(authUser);
     }
 
-    // ====================== ✅ 最终版：刷新 Token ======================
+    // ====================== ✅ 最终修复版：刷新 Token ======================
     public String refreshAccessToken(String refreshToken) {
         if (refreshToken == null || refreshToken.isBlank()) {
             throw new GlobalExceptionHandler.LoginException(ResultCodeEnum.TOKEN_EMPTY);
@@ -89,34 +90,54 @@ public class AuthService {
             throw new GlobalExceptionHandler.LoginException(ResultCodeEnum.TOKEN_INVALID);
         }
 
-        // ==============================================
-        // 🔥 1. 从 Redis 读取最新 permissionVersion
-        // ==============================================
+        // ====================== 自动续期所有 Redis Key ======================
+        redisUtil.expire(refreshKey, REFRESH_TOKEN_EXPIRE_SEC);
+        redisUtil.expire("auth:ver:" + userId, REFRESH_TOKEN_EXPIRE_SEC);
+        redisUtil.expire("auth:perm:" + userId, REFRESH_TOKEN_EXPIRE_SEC);
+
+        // ====================== 从 Redis 获取最新权限版本 ======================
         String versionKey = "auth:ver:" + userId;
         Long permissionVersion = redisUtil.getLong(versionKey);
 
-        // 兜底：Redis 无值 → 查数据库最新版本
+        // 兜底：Redis 没有就查库并重建
         if (permissionVersion == null) {
             SysUser user = userMapper.selectById(userId);
             permissionVersion = user.getPermissionVersion();
             redisUtil.set(versionKey, permissionVersion, REFRESH_TOKEN_EXPIRE_SEC);
         }
 
-        // ==============================================
-        // 🔥 2. 构建带最新版本号的 AuthUser
-        // ==============================================
+        // 生成最新 token
         boolean isSuperAdmin = userMapper.isSuperAdmin(userId);
         AuthUser authUser = new AuthUser();
         authUser.setUserId(userId);
         authUser.setSuperAdmin(isSuperAdmin);
-        authUser.setPermissionVersion(permissionVersion); // ✅ 最新版本必须放进去
+        authUser.setPermissionVersion(permissionVersion);
 
-        // ==============================================
-        // 🔥 3. 生成新 accessToken（带最新版本）并返回
-        // ==============================================
         return jwtUtil.generateToken(authUser, ACCESS_TOKEN_EXPIRE_MS);
     }
 
+    // ====================== 登出：删除该用户所有 refreshToken ======================
+    public void logout(String refreshToken) {
+        if (refreshToken == null || refreshToken.isBlank()) return;
+
+        String refreshKey = "refresh:" + refreshToken;
+        Long userId = redisUtil.getLong(refreshKey);
+
+        // 删除当前 token
+        redisUtil.del(refreshKey);
+
+        // 可选：删除该用户所有 token（多设备下线）
+        if (userId != null) {
+            redisUtil.del("auth:ver:" + userId);
+            redisUtil.del("auth:perm:" + userId);
+        }
+    }
+
+    // 类型转换工具
+    private Long toLong(Object obj) {
+        if (obj instanceof Number n) return n.longValue();
+        return Long.parseLong(obj.toString());
+    }
     // ====================== 获取用户权限ID ======================
     private Set<Long> getUserPermissionIds(Long userId) {
         List<Long> roleIds = userMapper.listRoleIdsByUserId(userId);
@@ -152,10 +173,5 @@ public class AuthService {
         return loginVO;
     }
 
-    // ====================== 登出 ======================
-    public void logout(String refreshToken) {
-        if (refreshToken == null || refreshToken.isBlank()) return;
-        String key = "refresh:" + refreshToken;
-        redisUtil.del(key);
-    }
+
 }
