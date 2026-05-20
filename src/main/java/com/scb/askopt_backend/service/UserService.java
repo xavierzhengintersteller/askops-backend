@@ -12,6 +12,8 @@ import org.springframework.stereotype.Service;
 import java.util.List;
 import java.util.stream.Collectors;
 
+import static com.scb.askopt_backend.constant.RedisConstants.REDIS_PERMISSION_VERSION;
+
 @Service
 public class UserService extends ServiceImpl<UserMapper, SysUser> {
     @Autowired
@@ -25,7 +27,7 @@ public class UserService extends ServiceImpl<UserMapper, SysUser> {
         // 🔥 直接从 ThreadLocal 获取是否超级管理员
         // ==============================================
         boolean isSuperAdmin = AuthContext.isSuperAdmin();
-        vo.setPermissionVersion( redisUtil.getLong("auth:ver:" + userId));
+        vo.setPermissionVersion( redisUtil.getLong(REDIS_PERMISSION_VERSION + userId));
         if (isSuperAdmin) {
             // ✅ 超管 → 直接返回全量菜单 + 全权限
             vo.setLeftMenuTree(buildMenuTree(baseMapper.selectAllMenuList(), null));

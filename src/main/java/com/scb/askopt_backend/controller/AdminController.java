@@ -1,12 +1,10 @@
 package com.scb.askopt_backend.controller;
 
-import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.scb.askopt_backend.dto.AddRoleDTO;
 import com.scb.askopt_backend.dto.admin.*;
 import com.scb.askopt_backend.entity.SysRole;
 import com.scb.askopt_backend.security.AuthContext;
 import com.scb.askopt_backend.service.AdminService;
-import com.scb.askopt_backend.service.PermissionService;
 import com.scb.askopt_backend.vo.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.transaction.annotation.Transactional;

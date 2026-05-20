@@ -4,15 +4,14 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.scb.askopt_backend.config.RedisUtil;
 import com.scb.askopt_backend.dto.AddRoleDTO;
 import com.scb.askopt_backend.dto.admin.*;
 import com.scb.askopt_backend.entity.*;
 import com.scb.askopt_backend.exception.ApiException;
-import com.scb.askopt_backend.exception.GlobalExceptionHandler;
 import com.scb.askopt_backend.exception.ResultCodeEnum;
 import com.scb.askopt_backend.mapper.*;
 import com.scb.askopt_backend.vo.*;
-import lombok.RequiredArgsConstructor;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -21,6 +20,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.*;
 import java.util.stream.Collectors;
+
+import static com.scb.askopt_backend.constant.RedisConstants.*;
 
 @Service
 public class AdminService extends ServiceImpl<UserMapper, SysUser> {
@@ -42,7 +43,10 @@ public class AdminService extends ServiceImpl<UserMapper, SysUser> {
     private RolePermissionMappingMapper rolePermissionMappingMapper;
     @Autowired
     private RoleGroupMappingMapper roleGroupMappingMapper;
-
+    @Autowired
+    private AuthService authService;
+    @Autowired
+    private RedisUtil redisUtil;
 
     /**
      * 查询用户列表（带角色）
@@ -50,6 +54,7 @@ public class AdminService extends ServiceImpl<UserMapper, SysUser> {
     public List<UserWithRolesVO> getUsersWithRoles() {
         return adminMapper.selectUsersWithRoles();
     }
+
     // 分页查询用户
     public IPage<UserPageVO> pageUser(UserPageDTO dto) {
         Page<SysUser> page = new Page<>(dto.getPageNum(), dto.getPageSize());
@@ -78,12 +83,11 @@ public class AdminService extends ServiceImpl<UserMapper, SysUser> {
         result.setRecords(records);
         return result;
     }
+
     // 全量用户列表（无分页、无筛选、无DTO）
     public List<UserPageVO> userList() {
-        // 查所有用户
         List<SysUser> userList = lambdaQuery().list();
 
-        // 组装VO
         return userList.stream().map(user -> {
             Long userId = user.getId();
 
@@ -114,12 +118,15 @@ public class AdminService extends ServiceImpl<UserMapper, SysUser> {
 
         return vo;
     }
+
     // 角色列表
     public List<SysRole> listAllRoles() {
         return roleMapper.selectList(null);
     }
 
-    // 分配角色（事务）
+    // ==============================
+    // 分配角色（已加权限刷新）
+    // ==============================
     @Transactional(rollbackFor = Exception.class)
     public void assignRolesToUser(AssignRoleDTO dto) {
         Long userId = dto.getUserId();
@@ -132,16 +139,14 @@ public class AdminService extends ServiceImpl<UserMapper, SysUser> {
         if (roleIds != null && !roleIds.isEmpty()) {
             userMapper.insertUserRoles(userId, roleIds);
         }
-    }
-    // ==================== 角色 ↔ 组 关联管理 ====================
 
-    /**
-     * 根据角色ID查询组列表
-     * 如果 roleId = null，返回所有组
-     */
+        // 🔥 刷新权限
+        refreshUserPermission(userId);
+    }
+
+    // ==================== 角色 ↔ 组 关联管理 ====================
     public List<GroupVO> getGroupsByRoleId(Long roleId) {
         if (roleId == null) {
-            // 返回【所有组】
             return tgroupMapper.selectList(null).stream().map(g -> {
                 GroupVO vo = new GroupVO();
                 vo.setGroupId(g.getId());
@@ -149,90 +154,73 @@ public class AdminService extends ServiceImpl<UserMapper, SysUser> {
                 return vo;
             }).collect(Collectors.toList());
         }
-
-        // 原有逻辑：根据角色ID查已分配组
         return roleMapper.selectGroupsByRoleId(roleId);
     }
 
-    /**
-     * 获取角色已分配的组ID
-     */
     public List<Long> getGroupIdsByRoleId(Long roleId) {
         return roleMapper.selectGroupIdsByRoleId(roleId).stream()
                 .map(o -> Long.valueOf(o.toString()))
                 .collect(Collectors.toList());
     }
-    /**
-     * 给角色分配组（事务 + 先删后插）
-     */
+
+    // ==============================
+    // 给角色分配组（已加权限刷新）
+    // ==============================
     @Transactional(rollbackFor = Exception.class)
     public void assignGroupsToRole(AssignRoleGroupDTO dto) {
         Long roleId = dto.getRoleId();
         List<Long> groupIds = dto.getGroupIds();
 
-        // 1. 删除旧关系
         roleMapper.deleteRoleGroups(roleId);
 
-        // 2. 批量插入新关系
         if (groupIds != null && !groupIds.isEmpty()) {
             roleMapper.batchInsertRoleGroups(roleId, groupIds);
         }
+
+        // 🔥 批量刷新
+        refreshRoleUsersPermission(roleId);
     }
 
-    /**
-     * 给角色分配权限（事务 + 先删后插）
-     * @param dto
-     */
+    // ==============================
+    // 给角色分配权限（已加权限刷新）
+    // ==============================
     @Transactional(rollbackFor = Exception.class)
     public void assignPermissionsToRole(AssignPermissionToRoleDTO dto) {
         Long roleId = dto.getRoleId();
         List<Long> permissionIds = dto.getPermissionIds();
 
-        // ==========================
-        // 1. 删除该角色所有旧权限（MP 写法）
-        // ==========================
         LambdaQueryWrapper<RolePermissionMapping> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(RolePermissionMapping::getRoleId, roleId);
         rolePermissionMappingMapper.delete(wrapper);
 
-        // ==========================
-        // 2. 空值直接返回
-        // ==========================
         if (permissionIds == null || permissionIds.isEmpty()) {
             return;
         }
 
-        // ==========================
-        // 3. 去重（防止前端传重复ID）
-        // ==========================
         Set<Long> uniqueSet = new HashSet<>(permissionIds);
-
-        // ==========================
-        // 4. 批量插入新权限（MP）
-        // ==========================
-        List<RolePermissionMapping> list = new ArrayList<>();
         for (Long permId : uniqueSet) {
             RolePermissionMapping mapping = new RolePermissionMapping();
             mapping.setRoleId(roleId);
             mapping.setPermissionId(permId);
-            list.add(mapping);
-        }
-
-        // 批量插入（MyBatis-Plus 官方推荐）
-        for (RolePermissionMapping mapping : list) {
             rolePermissionMappingMapper.insert(mapping);
         }
+
+        // 🔥 批量刷新
+        refreshRoleUsersPermission(roleId);
     }
-    /**
-     * 清空角色组
-     */
+
+    // ==============================
+    // 清空角色组（已加权限刷新）
+    // ==============================
     @Transactional(rollbackFor = Exception.class)
     public void clearRoleGroups(Long roleId) {
         roleMapper.deleteRoleGroups(roleId);
+        // 🔥 批量刷新
+        refreshRoleUsersPermission(roleId);
     }
-    // ==================== 权限树（核心修复） ====================
+
+    // ==================== 权限树 ====================
     public List<PermissionTreeVO> getPermissionTree() {
-        // 从 PermissionMapper 查询所有权限
         List<SysPermission> allPermissions = permissionMapper.selectList(null);
 
         List<PermissionTreeVO> allVos = allPermissions.stream().map(p -> {
@@ -254,27 +242,28 @@ public class AdminService extends ServiceImpl<UserMapper, SysUser> {
                 .collect(Collectors.toList());
     }
 
+    // 新增用户
     @Transactional(rollbackFor = Exception.class)
     public void addUser(AddUserDTO dto) {
-        // 1. 新建用户
         SysUser user = new SysUser();
         user.setUsername(dto.getUsername());
-        user.setPassword(passwordEncoder.encode(dto.getPassword())); // 正式项目记得加密 BCrypt
+        user.setPassword(passwordEncoder.encode(dto.getPassword()));
         user.setEnabled(true);
-        save(user); // 保存后 user.getId() 才有值
+        save(user);
 
-        // 2. 分配角色（你已有的方法复用）
         AssignRoleDTO assignRoleDTO = new AssignRoleDTO();
         assignRoleDTO.setUserId(user.getId());
         assignRoleDTO.setRoleIds(dto.getRoleIds());
-        assignRolesToUser(assignRoleDTO); // 复用你原来的分配逻辑
+        assignRolesToUser(assignRoleDTO);
     }
 
+    // ==============================
+    // 用户拉黑/解禁
+    // ==============================
     @Transactional
     public void updateUserStatus(BlacklistUserDTO dto) {
         SysUser user = getById(dto.getUserId());
 
-        // admin 直接不执行，不抛异常
         if (user != null && "admin".equals(user.getUsername())) {
             return;
         }
@@ -283,13 +272,16 @@ public class AdminService extends ServiceImpl<UserMapper, SysUser> {
                 .eq(SysUser::getId, dto.getUserId())
                 .set(SysUser::getEnabled, dto.getEnabled())
                 .update();
+
     }
 
+    // ==============================
+    // 删除用户（已加权限刷新）
+    // ==============================
     @Transactional
     public void deleteUser(Long userId) {
         SysUser user = getById(userId);
 
-        // admin 不允许删，直接 return
         if (user != null && "admin".equals(user.getUsername())) {
             return;
         }
@@ -299,13 +291,17 @@ public class AdminService extends ServiceImpl<UserMapper, SysUser> {
                         .eq(UserRoleMapping::getUserId, userId)
         );
         this.removeById(userId);
+
+        String keyVer = REDIS_PERMISSION_VERSION + userId;
+        String keyPerm = REDIS_PERMISSION_LIST + userId;
+        redisUtil.del(keyVer);
+        redisUtil.del(keyPerm);
     }
 
     @Transactional(rollbackFor = Exception.class)
     public void updatePassword(UpdateUserPwdDTO dto) {
         SysUser user = getById(dto.getUserId());
 
-        // admin 不允许改密，直接 return
         if (user != null && "admin".equals(user.getUsername())) {
             return;
         }
@@ -316,84 +312,56 @@ public class AdminService extends ServiceImpl<UserMapper, SysUser> {
                 .update();
     }
 
-    /**
-     * 根据角色ID查询该角色已分配的所有权限ID列表
-     * MyBatis-Plus 纯写法，无XML，用于前端权限树回显勾选
-     *
-     * @param roleId 角色ID
-     * @return 权限ID集合 List<Long>
-     */
     public List<Long> getPermissionIdsByRoleId(Long roleId) {
-        // 1. 构建查询条件
         LambdaQueryWrapper<RolePermissionMapping> wrapper = new LambdaQueryWrapper<>();
-
-        // 2. 条件：只查询当前角色的权限关联记录
         wrapper.eq(RolePermissionMapping::getRoleId, roleId);
-
-        // 3. 只查询 permission_id 这一个字段，提高查询效率
         wrapper.select(RolePermissionMapping::getPermissionId);
 
-        // 4. 调用MP的selectObjs，只返回查询字段的对象列表
-        // 5. 流式处理：将Object强转为Long，并收集为List返回
         return rolePermissionMappingMapper.selectObjs(wrapper).stream()
                 .map(o -> Long.valueOf(o.toString()))
                 .collect(Collectors.toList());
     }
 
-    /**
-     * 删除角色（业务层）
-     * @param roleId 角色主键ID
-     */
+    // ==============================
+    // 删除角色（已加权限刷新）
+    // ==============================
+    @Transactional(rollbackFor = Exception.class)
     public void deleteRoleById(Long roleId) {
-        // 1. 查询角色信息，禁止删除超级管理员角色
         SysRole role = roleMapper.selectById(roleId);
         if (role == null) {
-            throw new ApiException(ResultCodeEnum.Role_NOTEXIST.getCode(),
-                    ResultCodeEnum.Role_NOTEXIST.getMessage());
+            throw new ApiException(ResultCodeEnum.Role_NOTEXIST.getCode(), ResultCodeEnum.Role_NOTEXIST.getMessage());
         }
         if ("admin".equals(role.getRoleCode())) {
-            throw new ApiException(ResultCodeEnum.NOT_ALLOW_CHANGE_ADMIN_STATUS.getCode(),
-                    ResultCodeEnum.NOT_ALLOW_CHANGE_ADMIN_STATUS.getMessage());
+            throw new ApiException(ResultCodeEnum.NOT_ALLOW_CHANGE_ADMIN_STATUS.getCode(), ResultCodeEnum.NOT_ALLOW_CHANGE_ADMIN_STATUS.getMessage());
         }
 
-        // ========== 2. 级联删除关联中间表数据 ==========
-        // 2. 删除【用户-角色】关联（你之前漏了这个！）
+        // 先刷新再删除
+        refreshRoleUsersPermission(roleId);
+
         LambdaQueryWrapper<UserRoleMapping> userWrapper = new LambdaQueryWrapper<>();
         userWrapper.eq(UserRoleMapping::getRoleId, roleId);
         userRoleMappingMapper.delete(userWrapper);
-        // 2.1 删除 角色-权限 关联
+
         LambdaQueryWrapper<RolePermissionMapping> permWrapper = new LambdaQueryWrapper<>();
         permWrapper.eq(RolePermissionMapping::getRoleId, roleId);
         rolePermissionMappingMapper.delete(permWrapper);
 
-        // 2.2 删除 角色-组 关联
         LambdaQueryWrapper<RoleGroupMapping> groupWrapper = new LambdaQueryWrapper<>();
         groupWrapper.eq(RoleGroupMapping::getRoleId, roleId);
         roleGroupMappingMapper.delete(groupWrapper);
 
-        // ========== 3. 删除角色主表数据 ==========
         roleMapper.deleteById(roleId);
     }
 
-    /**
-     * 获取所有角色的完整详情（角色信息 + 权限名称 + 组名称）
-     * 用于前端角色管理列表页面展示
-     *
-     * @return 角色详情列表
-     */
-     //
     public List<RoleDetailVO> getAllRoleDetailList() {
-        // 1. 查询所有角色
         List<SysRole> roleList = roleMapper.selectList(null);
 
-        // 2. 逐个封装 VO
         return roleList.stream().map(role -> {
             RoleDetailVO vo = new RoleDetailVO();
             vo.setId(role.getId());
             vo.setRoleName(role.getRoleName());
             vo.setRoleCode(role.getRoleCode());
 
-            // ========== 封装 权限名称列表（修复空集合问题） ==========
             List<Long> permissionIds = getPermissionIdsByRoleId(role.getId());
             List<String> permissionNames;
 
@@ -409,7 +377,6 @@ public class AdminService extends ServiceImpl<UserMapper, SysUser> {
             }
             vo.setPermissionNames(permissionNames);
 
-            // ========== 封装 组名称列表（修复空集合问题） ==========
             List<Long> groupIds = getGroupIdsByRoleId(role.getId());
             List<String> groupNames;
 
@@ -427,13 +394,9 @@ public class AdminService extends ServiceImpl<UserMapper, SysUser> {
             return vo;
         }).toList();
     }
-    /**
-     * 新增角色
-     * 校验：角色编码唯一、角色名称唯一
-     */
+
     @Transactional(rollbackFor = Exception.class)
     public void addRole(AddRoleDTO dto) {
-        // 1. 校验角色编码是否重复
         Long countCode = roleMapper.selectCount(
                 new LambdaQueryWrapper<SysRole>()
                         .eq(SysRole::getRoleCode, dto.getRoleCode())
@@ -442,7 +405,6 @@ public class AdminService extends ServiceImpl<UserMapper, SysUser> {
             throw new ApiException(ResultCodeEnum.VALUE_ALREADY_EXIST.getCode(), ResultCodeEnum.VALUE_ALREADY_EXIST.getMessage());
         }
 
-        // 2. 校验角色名称是否重复
         Long countName = roleMapper.selectCount(
                 new LambdaQueryWrapper<SysRole>()
                         .eq(SysRole::getRoleName, dto.getRoleName())
@@ -451,10 +413,50 @@ public class AdminService extends ServiceImpl<UserMapper, SysUser> {
             throw new ApiException(ResultCodeEnum.VALUE_ALREADY_EXIST.getCode(), ResultCodeEnum.VALUE_ALREADY_EXIST.getMessage());
         }
 
-        // 3. 插入新角色
         SysRole role = new SysRole();
         role.setRoleName(dto.getRoleName());
         role.setRoleCode(dto.getRoleCode());
         roleMapper.insert(role);
     }
+
+    // ==================== 权限刷新工具方法 ====================
+    /**
+     * 权限变更后强制刷新（Long 版本号 · 终极版）
+     */
+    public void refreshUserPermission(Long userId) {
+        if (userId == null) return;
+
+        String keyVer = REDIS_PERMISSION_VERSION + userId;
+        String keyPerm = REDIS_PERMISSION_LIST + userId;
+
+        // 🔥 唯一 Long 版本号：时间戳 + 随机数（绝对不重复）
+        long newVersion = System.currentTimeMillis() + new Random().nextInt(1000);
+
+        // 获取最新权限
+        Set<Long> permissionIds = authService.getUserPermissionIds(userId);
+
+        // 写入 Redis
+        redisUtil.set(keyVer, newVersion, REFRESH_TOKEN_EXPIRE_SEC);
+        redisUtil.set(keyPerm, permissionIds, REFRESH_TOKEN_EXPIRE_SEC);
+    }
+
+    /**
+     * 批量刷新角色下所有用户权限
+     */
+    public void refreshRoleUsersPermission(Long roleId) {
+        if (roleId == null) return;
+
+        Set<Long> userIds = userRoleMappingMapper.selectObjs(
+                        new LambdaQueryWrapper<UserRoleMapping>()
+                                .eq(UserRoleMapping::getRoleId, roleId)
+                                .select(UserRoleMapping::getUserId)
+                ).stream()
+                .map(o -> Long.valueOf(o.toString()))
+                .collect(Collectors.toSet());
+
+        for (Long userId : userIds) {
+            refreshUserPermission(userId);
+        }
+    }
+
 }

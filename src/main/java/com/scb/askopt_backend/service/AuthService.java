@@ -19,6 +19,8 @@ import org.springframework.stereotype.Service;
 
 import java.util.*;
 
+import static com.scb.askopt_backend.constant.RedisConstants.*;
+
 @Slf4j
 @Service
 public class AuthService {
@@ -71,7 +73,7 @@ public class AuthService {
 
         // 4. 缓存权限
         Set<Long> permissionIds = getUserPermissionIds(userId);
-        redisUtil.set("auth:perm:" + userId, permissionIds, REFRESH_TOKEN_EXPIRE_SEC);
+        redisUtil.set(REDIS_PERMISSION_LIST + userId, permissionIds, REFRESH_TOKEN_EXPIRE_SEC);
 
         // 5. 生成 token 并返回 LoginVO
         return generateAndCacheTokens(authUser);
@@ -83,7 +85,7 @@ public class AuthService {
             throw new GlobalExceptionHandler.LoginException(ResultCodeEnum.TOKEN_EMPTY);
         }
 
-        String refreshKey = "refresh:" + refreshToken;
+        String refreshKey = REDIS_REFRESH_TOKEN + refreshToken;
         Long userId = redisUtil.getLong(refreshKey);
 
         if (userId == null) {
@@ -92,11 +94,11 @@ public class AuthService {
 
         // ====================== 自动续期所有 Redis Key ======================
         redisUtil.expire(refreshKey, REFRESH_TOKEN_EXPIRE_SEC);
-        redisUtil.expire("auth:ver:" + userId, REFRESH_TOKEN_EXPIRE_SEC);
-        redisUtil.expire("auth:perm:" + userId, REFRESH_TOKEN_EXPIRE_SEC);
+        redisUtil.expire(REDIS_PERMISSION_VERSION + userId, REFRESH_TOKEN_EXPIRE_SEC);
+        redisUtil.expire(REDIS_PERMISSION_LIST + userId, REFRESH_TOKEN_EXPIRE_SEC);
 
         // ====================== 从 Redis 获取最新权限版本 ======================
-        String versionKey = "auth:ver:" + userId;
+        String versionKey = REDIS_PERMISSION_VERSION + userId;
         Long permissionVersion = redisUtil.getLong(versionKey);
 
         // 兜底：Redis 没有就查库并重建
@@ -120,7 +122,7 @@ public class AuthService {
     public void logout(String refreshToken) {
         if (refreshToken == null || refreshToken.isBlank()) return;
 
-        String refreshKey = "refresh:" + refreshToken;
+        String refreshKey = REDIS_REFRESH_TOKEN + refreshToken;
         Long userId = redisUtil.getLong(refreshKey);
 
         // 删除当前 token
@@ -128,8 +130,8 @@ public class AuthService {
 
         // 可选：删除该用户所有 token（多设备下线）
         if (userId != null) {
-            redisUtil.del("auth:ver:" + userId);
-            redisUtil.del("auth:perm:" + userId);
+            redisUtil.del(REDIS_PERMISSION_VERSION + userId);
+            redisUtil.del(REDIS_PERMISSION_LIST + userId);
         }
     }
 
@@ -139,7 +141,7 @@ public class AuthService {
         return Long.parseLong(obj.toString());
     }
     // ====================== 获取用户权限ID ======================
-    private Set<Long> getUserPermissionIds(Long userId) {
+    public Set<Long> getUserPermissionIds(Long userId) {
         List<Long> roleIds = userMapper.listRoleIdsByUserId(userId);
         if (roleIds.isEmpty()) {
             return new HashSet<>();
@@ -167,8 +169,8 @@ public class AuthService {
         loginVO.setRefreshToken(refreshToken);
 
         // 缓存到 Redis
-        redisUtil.set("auth:ver:" + userId, authUser.getPermissionVersion(), REFRESH_TOKEN_EXPIRE_SEC);
-        redisUtil.set("refresh:" + refreshToken, userId, REFRESH_TOKEN_EXPIRE_SEC);
+        redisUtil.set(REDIS_PERMISSION_VERSION + userId, authUser.getPermissionVersion(), REFRESH_TOKEN_EXPIRE_SEC);
+        redisUtil.set(REDIS_REFRESH_TOKEN + refreshToken, userId, REFRESH_TOKEN_EXPIRE_SEC);
 
         return loginVO;
     }

@@ -16,6 +16,8 @@ import org.springframework.stereotype.Component;
 import java.io.IOException;
 import java.util.*;
 
+import static com.scb.askopt_backend.constant.RedisConstants.*;
+
 @Slf4j
 @Component
 @RequiredArgsConstructor
@@ -100,7 +102,7 @@ public class JwtAuthFilter implements Filter {
         }
 
         // 5. 普通用户：校验权限版本
-        Object redisVerObj = redisUtil.get("auth:ver:" + userId);
+        Object redisVerObj = redisUtil.get(REDIS_PERMISSION_VERSION + userId);
         if (redisVerObj == null) {
             unauthorized(resp, "session expired");
             return;
@@ -113,7 +115,7 @@ public class JwtAuthFilter implements Filter {
         }
 
         // 6. 权限校验
-        Object permObj = redisUtil.get("auth:perm:" + userId);
+        Object permObj = redisUtil.get(REDIS_PERMISSION_LIST + userId);
         if (permObj == null) {
             forbidden(resp, "no permissions");
             return;
