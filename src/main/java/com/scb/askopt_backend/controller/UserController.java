@@ -1,6 +1,6 @@
 package com.scb.askopt_backend.controller;
 
-import com.scb.askopt_backend.security.AuthContext;
+import com.scb.askopt_backend.context.AuthContext;
 import com.scb.askopt_backend.service.UserService;
 import com.scb.askopt_backend.vo.ApiResponse;
 import com.scb.askopt_backend.vo.UserPermissionAndMenuVO;

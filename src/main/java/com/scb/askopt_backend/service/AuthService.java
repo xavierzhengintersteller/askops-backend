@@ -7,7 +7,6 @@ import com.scb.askopt_backend.exception.GlobalExceptionHandler;
 import com.scb.askopt_backend.exception.ResultCodeEnum;
 import com.scb.askopt_backend.mapper.PermissionMapper;
 import com.scb.askopt_backend.mapper.UserMapper;
-import com.scb.askopt_backend.security.AuthContext;
 import com.scb.askopt_backend.security.AuthUser;
 import com.scb.askopt_backend.security.JwtUtil;
 import com.scb.askopt_backend.vo.LoginVO;

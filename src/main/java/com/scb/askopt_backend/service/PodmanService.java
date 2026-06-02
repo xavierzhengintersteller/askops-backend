@@ -15,7 +15,7 @@ import com.scb.askopt_backend.entity.Agent;
 import com.scb.askopt_backend.exception.ApiException;
 import com.scb.askopt_backend.exception.ResultCodeEnum;
 import com.scb.askopt_backend.mapper.AgentMapper;
-import com.scb.askopt_backend.security.AuthContext;
+import com.scb.askopt_backend.context.AuthContext;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;

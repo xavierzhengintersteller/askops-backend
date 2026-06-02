@@ -1,4 +1,4 @@
-package com.scb.askopt_backend.security;
+package com.scb.askopt_backend.context;
 
 import lombok.experimental.UtilityClass;
 

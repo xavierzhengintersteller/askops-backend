@@ -2,6 +2,7 @@ package com.scb.askopt_backend.security;
 
 import com.scb.askopt_backend.config.RedisUtil;
 import com.scb.askopt_backend.constant.RedisConstants;
+import com.scb.askopt_backend.context.AuthContext;
 import com.scb.askopt_backend.vo.ApiResponse;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.jsonwebtoken.Claims;
@@ -11,6 +12,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.slf4j.MDC;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
@@ -47,108 +49,120 @@ public class JwtAuthFilter implements Filter {
         String path = req.getServletPath();
         String method = req.getMethod();
 
-        // 1. 白名单 / OPTIONS 放行
-        if (isWhitelisted(path) || "OPTIONS".equalsIgnoreCase(method)) {
-            chain.doFilter(request, response);
-            return;
-        }
-
-        // 2. 获取 Token
-        String header = req.getHeader("Authorization");
-        if (header == null || !header.startsWith("Bearer ")) {
-            unauthorized(resp, "missing token");
-            return;
-        }
-        String token = header.substring(7);
-
-        // 3. 解析 JWT
-        Claims claims;
+        // ==============================================
+        // 【全局 TraceID 生成】所有请求都生成，包括白名单
+        // ==============================================
+        String traceId = UUID.randomUUID().toString().replace("-", "");
+        req.setAttribute("traceId", traceId); // 放入 request，给 AOP 使用
+        MDC.put("traceId", traceId);           // 放入日志，方便排查
+        resp.setHeader("X-Trace-Id",traceId);   //  响应带回前端
         try {
-            claims = jwtUtil.parse(token);
-        } catch (JwtException | IllegalArgumentException e) {
-            log.warn("JWT 解析失败: {}", e.getMessage());
-            unauthorized(resp, "invalid token");
-            return;
-        }
+            // 1. 白名单 / OPTIONS 放行
+            if (isWhitelisted(path) || "OPTIONS".equalsIgnoreCase(method)) {
+                chain.doFilter(request, response);
+                return;
+            }
 
-        // 4. 从 Token 读取用户信息
-        Long userId = getLongClaim(claims, "uid");
-        Long tokenVersion = getLongClaim(claims, "ver");
-        boolean superAdmin = Boolean.TRUE.equals(claims.getOrDefault("superAdmin", false));
-        // ========== 黑名单校验 ==========
-        String blackKey = RedisConstants.REDIS_BLACKLIST_USER + userId;
-        if (redisUtil.hasKey(blackKey)) {
-            unauthorized(resp, "user disabled or forced offline");
-            return;
-        }
-        if (userId == null || tokenVersion == null) {
-            unauthorized(resp, "invalid token payload");
-            return;
-        }
+            // 2. 获取 Token
+            String header = req.getHeader("Authorization");
+            if (header == null || !header.startsWith("Bearer ")) {
+                unauthorized(resp, "missing token");
+                return;
+            }
+            String token = header.substring(7);
 
-        // ==============================================
-        // 超级管理员 → 直接放行
-        // ==============================================
-        if (superAdmin) {
+            // 3. 解析 JWT
+            Claims claims;
+            try {
+                claims = jwtUtil.parse(token);
+            } catch (JwtException | IllegalArgumentException e) {
+                log.warn("JWT 解析失败: {}", e.getMessage());
+                unauthorized(resp, "invalid token");
+                return;
+            }
+
+            // 4. 从 Token 读取用户信息
+            Long userId = getLongClaim(claims, "uid");
+            Long tokenVersion = getLongClaim(claims, "ver");
+            boolean superAdmin = Boolean.TRUE.equals(claims.getOrDefault("superAdmin", false));
+            // ========== 黑名单校验 ==========
+            String blackKey = RedisConstants.REDIS_BLACKLIST_USER + userId;
+            if (redisUtil.hasKey(blackKey)) {
+                unauthorized(resp, "user disabled or forced offline");
+                return;
+            }
+            if (userId == null || tokenVersion == null) {
+                unauthorized(resp, "invalid token payload");
+                return;
+            }
+
+            // ==============================================
+            // 超级管理员 → 直接放行
+            // ==============================================
+            if (superAdmin) {
+                AuthContext.setUserId(userId);
+                AuthContext.setPermissionVersion(tokenVersion);
+                AuthContext.setSuperAdmin(true);
+                try {
+                    chain.doFilter(request, response);
+                } finally {
+                    AuthContext.clear();
+                }
+                return;
+            }
+
+            // 5. 普通用户：校验权限版本
+            Object redisVerObj = redisUtil.get(REDIS_PERMISSION_VERSION + userId);
+            if (redisVerObj == null) {
+                unauthorized(resp, "session expired");
+                return;
+            }
+
+            Long currentVersion = toLong(redisVerObj);
+            if (!tokenVersion.equals(currentVersion)) {
+                unauthorized(resp, "permission changed");
+                return;
+            }
+
+            // 6. 权限校验
+            Object permObj = redisUtil.get(REDIS_PERMISSION_LIST + userId);
+            if (permObj == null) {
+                forbidden(resp, "no permissions");
+                return;
+            }
+
+            Set<Long> permissionIds = safeConvertToLongSet(permObj);
+            String requiredPermIdStr = permissionMatcher.match(path, method);
+
+            if (requiredPermIdStr == null) {
+                log.warn("⚠️ 未配置权限的接口被访问：{} {}", method, path);
+                forbidden(resp, "no permission config");
+                return;
+            }
+
+            try {
+                Long required = Long.parseLong(requiredPermIdStr);
+                if (!permissionIds.contains(required)) {
+                    forbidden(resp, "no permission");
+                    return;
+                }
+            } catch (NumberFormatException e) {
+                forbidden(resp, "permission config error");
+                return;
+            }
+
+            // 7. 放行前存入 ThreadLocal
             AuthContext.setUserId(userId);
             AuthContext.setPermissionVersion(tokenVersion);
-            AuthContext.setSuperAdmin(true);
+            AuthContext.setSuperAdmin(false);
             try {
                 chain.doFilter(request, response);
             } finally {
                 AuthContext.clear();
             }
-            return;
-        }
-
-        // 5. 普通用户：校验权限版本
-        Object redisVerObj = redisUtil.get(REDIS_PERMISSION_VERSION + userId);
-        if (redisVerObj == null) {
-            unauthorized(resp, "session expired");
-            return;
-        }
-
-        Long currentVersion = toLong(redisVerObj);
-        if (!tokenVersion.equals(currentVersion)) {
-            unauthorized(resp, "permission changed");
-            return;
-        }
-
-        // 6. 权限校验
-        Object permObj = redisUtil.get(REDIS_PERMISSION_LIST + userId);
-        if (permObj == null) {
-            forbidden(resp, "no permissions");
-            return;
-        }
-
-        Set<Long> permissionIds = safeConvertToLongSet(permObj);
-        String requiredPermIdStr = permissionMatcher.match(path, method);
-
-        if (requiredPermIdStr == null) {
-            log.warn("⚠️ 未配置权限的接口被访问：{} {}", method, path);
-            forbidden(resp, "no permission config");
-            return;
-        }
-
-        try {
-            Long required = Long.parseLong(requiredPermIdStr);
-            if (!permissionIds.contains(required)) {
-                forbidden(resp, "no permission");
-                return;
-            }
-        } catch (NumberFormatException e) {
-            forbidden(resp, "permission config error");
-            return;
-        }
-
-        // 7. 放行前存入 ThreadLocal
-        AuthContext.setUserId(userId);
-        AuthContext.setPermissionVersion(tokenVersion);
-        AuthContext.setSuperAdmin(false);
-        try {
-            chain.doFilter(request, response);
         } finally {
-            AuthContext.clear();
+            // 最后清空 MDC
+            MDC.clear();
         }
     }
 

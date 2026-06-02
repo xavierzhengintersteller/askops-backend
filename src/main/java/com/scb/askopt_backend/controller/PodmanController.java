@@ -1,5 +1,8 @@
 package com.scb.askopt_backend.controller;
 
+import com.scb.askopt_backend.annotation.AuditLog;
+import com.scb.askopt_backend.constant.AuditConstant;
+import com.scb.askopt_backend.context.AuditStatusContext;
 import com.scb.askopt_backend.dto.*;
 import com.scb.askopt_backend.dto.RestartContainer.BatchRestartContainerRequest;
 import com.scb.askopt_backend.dto.RestartContainer.BatchRestartContainerResponse;
@@ -17,38 +20,12 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/containers")
 public class PodmanController {
+
     @Autowired
     private PodmanService podmanService;
 
-//    @GetMapping(
-//            value = "/{name}/logs/stream",
-//            produces = MediaType.TEXT_EVENT_STREAM_VALUE
-//    )
-//    public Flux<ServerSentEvent<String>> streamLogs(
-//            @PathVariable String name) {
-//
-//        return podmanService.streamContainerLogs(name)
-//                .map(line ->
-//                        ServerSentEvent.builder(line)
-//                                .event("log")
-//                                .build()
-//                );
-//    }
-//    @GetMapping("/{name}/logs/raws")
-//    public ApiResponse<List<String>> rawLogs(
-//            @PathVariable String name,
-//
-//
-//            @RequestParam(required = false, defaultValue = "100") int lines
-//    ) {
-//        try {
-//            // 调用 Service 层获取日志列表
-//            List<String> logs = podmanService.rawLogs(name, lines);
-//            return ApiResponse.success(logs);
-//        } catch (Exception e) {
-//            return ApiResponse.error(500,"获取日志失败: " + e.getMessage());
-//        }
-//    }
+    // 重启容器
+    @AuditLog(module = "CONTAINER", operation = AuditConstant.UPDATE)
     @PostMapping("/restart")
     public ApiResponse<String> restartContainer(@RequestBody ContainerRestartItem request) {
         try {
@@ -57,21 +34,37 @@ public class PodmanController {
                     "Container " + request.getContainerName() + " restarted on node " + request.getNodeIp()
             );
         } catch (Exception e) {
+            // ✅ 标记审计状态为失败
+            AuditStatusContext.setStatus(AuditConstant.STATUS_FAIL);
             return ApiResponse.error(500, e.getMessage());
         }
     }
-    // 批量重启接口
+
+    // 批量重启
+    @AuditLog(module = "CONTAINER", operation = AuditConstant.UPDATE)
     @PostMapping("/batch-restart")
     public BatchRestartContainerResponse batchRestart(@RequestBody BatchRestartContainerRequest request) {
-        return podmanService.batchRestartContainers(request);
-    }
-    @GetMapping("containers")
-    public ApiResponse<List<ContainerInfoDTO>> getContainers(
-            @RequestParam(required = false) List<String> nodeIps,  // 👈 改成 List
-            @RequestParam(defaultValue = "false") boolean manual
-    ) {
-            List<ContainerInfoDTO> containers = podmanService.getContainers(nodeIps,manual);
-            return ApiResponse.success(containers);
+        BatchRestartContainerResponse resp = podmanService.batchRestartContainers(request);
+
+        // ====================== 批量操作状态判断
+        if (resp.getFail() > 0) {
+            if (resp.getSuccess() == 0) {
+                AuditStatusContext.setStatus(AuditConstant.STATUS_FAIL);
+            } else {
+                AuditStatusContext.setStatus(AuditConstant.STATUS_PARTIAL_FAIL);
+            }
+        }
+
+        return resp;
     }
 
+    // 获取容器列表
+    @GetMapping("/containers")
+    public ApiResponse<List<ContainerInfoDTO>> getContainers(
+            @RequestParam(required = false) List<String> nodeIps,
+            @RequestParam(defaultValue = "false") boolean manual
+    ) {
+        List<ContainerInfoDTO> containers = podmanService.getContainers(nodeIps, manual);
+        return ApiResponse.success(containers);
+    }
 }

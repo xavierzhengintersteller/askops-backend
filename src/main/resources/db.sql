@@ -243,3 +243,30 @@ ALTER TABLE sys_permission
 -- 6. 删除旧的唯一约束（如果存在）
 ALTER TABLE sys_permission
 DROP CONSTRAINT IF EXISTS uk_permission_code;
+
+
+DROP TABLE IF EXISTS sys_audit_log;
+CREATE TABLE sys_audit_log (
+    id              BIGSERIAL PRIMARY KEY,
+    trace_id        VARCHAR(64)          DEFAULT NULL,
+    user_id         BIGINT               DEFAULT NULL,
+    super_admin     BOOLEAN              DEFAULT FALSE,
+    module          VARCHAR(100)         DEFAULT NULL,
+    operation       VARCHAR(50)          DEFAULT NULL,
+    request_path    VARCHAR(255)         DEFAULT NULL,
+    request_method  VARCHAR(20)          DEFAULT NULL,
+    request_ip      VARCHAR(50)          DEFAULT NULL,
+    user_agent      VARCHAR(1000)        DEFAULT NULL,
+    request_params  TEXT                 DEFAULT NULL,
+    response_result TEXT                 DEFAULT NULL,
+    http_code       INT                  DEFAULT NULL,
+    cost_time       BIGINT               DEFAULT NULL,
+    status          VARCHAR(20)          DEFAULT NULL,
+    error_msg       TEXT                 DEFAULT NULL,
+    create_time     TIMESTAMP            DEFAULT CURRENT_TIMESTAMP
+);
+????
+-- 索引：加速日志查询（必加）
+CREATE INDEX idx_sys_audit_log_trace_id ON sys_audit_log (trace_id);
+CREATE INDEX idx_sys_audit_log_user_id ON sys_audit_log (user_id);
+CREATE INDEX idx_sys_audit_log_create_time ON sys_audit_log (create_time);

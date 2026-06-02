@@ -4,7 +4,7 @@ import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.scb.askopt_backend.config.RedisUtil;
 import com.scb.askopt_backend.entity.SysUser;
 import com.scb.askopt_backend.mapper.UserMapper;
-import com.scb.askopt_backend.security.AuthContext;
+import com.scb.askopt_backend.context.AuthContext;
 import com.scb.askopt_backend.vo.UserMenuVO;
 import com.scb.askopt_backend.vo.UserPermissionAndMenuVO;
 import org.springframework.beans.factory.annotation.Autowired;
