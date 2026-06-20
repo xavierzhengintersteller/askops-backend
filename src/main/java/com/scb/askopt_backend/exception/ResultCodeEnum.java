@@ -10,6 +10,8 @@ public enum ResultCodeEnum {
     LOGIN_ERROR(401, "用户名或密码错误"),
     USER_DISABLED(100002, "当前用户已被禁用，请联系管理员"),
     NO_AGENT(100001, "当前用户未分配代理节点"),
+    NO_PERMISSION_NODE(100016, "无访问该节点权限"),
+    NO_SUCH_NODE(100017, "节点不存在"),
     SYSTEM_ERROR(500, "系统异常"),
     BAD_REQUEST(400, "参数错误"),
     TOKEN_EMPTY(401, "refreshToken 不能为空"),

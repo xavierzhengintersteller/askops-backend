@@ -62,7 +62,16 @@ public class PodmanService {
     private static final String PATH_CONTAINER_LIST = API_PREFIX + "/containers";
     private static final String PATH_BATCH_RESTART = API_PREFIX + "/containers/batch-restart";
 
-    //==================== 查询容器列表（原有逻辑不变，异常细分）====================
+    // 提示文案常量，统一管理
+    private static final String MSG_NO_AGENT = "无可用Agent节点";
+    private static final String MSG_NO_PERMISSION = "无访问该节点权限";
+    private static final String MSG_NODE_NOT_EXIST = "节点不存在";
+    private static final String MSG_CONNECT_TIMEOUT = "请求节点超时";
+    private static final String MSG_CONNECT_FAIL = "连接节点失败";
+    private static final String MSG_NO_RESULT = "无执行结果";
+    private static final String MSG_UNKNOWN_ERROR = "未知异常";
+
+    //==================== 查询容器列表 ====================
     public List<ContainerInfoDTO> getContainers(List<String> nodeIps, boolean manual) {
         Long userId = AuthContext.getUserId();
         List<AgentIpPortDTO> userAgents = agentMapper.findAgentsByUserId(userId);
@@ -180,26 +189,55 @@ public class PodmanService {
         }
     }
 
-    //==================== 单个容器重启（参数校验 + 复用批量接口）====================
+    //==================== 单个容器重启 ====================
     public void restart(String containerName, String nodeIp) {
+        long start = System.currentTimeMillis();
+        // 基础非空校验
         if (containerName == null || containerName.isBlank() || nodeIp == null || nodeIp.isBlank()) {
             throw new ApiException(ResultCodeEnum.BAD_REQUEST, "容器名称/节点IP不能为空");
         }
+        // 清洗参数
+        String cleanContainer = containerName.trim();
+        String cleanNodeIp = nodeIp.trim();
+        log.info("单容器重启请求，容器:{},节点:{}", cleanContainer, cleanNodeIp);
+
         BatchRestartContainerRequest req = new BatchRestartContainerRequest();
         ContainerRestartItem item = new ContainerRestartItem();
-        item.setContainerName(containerName.trim());
-        item.setNodeIp(nodeIp.trim());
+        item.setContainerName(cleanContainer);
+        item.setNodeIp(cleanNodeIp);
         req.setContainerItems(List.of(item));
 
         BatchRestartContainerResponse resp = batchRestartContainers(req);
-        RestartResult result = resp.getResults().get(0);
-        if (!result.isSuccess()) {
-            throw new ApiException(ResultCodeEnum.SYSTEM_ERROR, "容器重启失败：" + result.getMessage());
+        List<RestartResult> resultList = resp.getResults();
+        // 防止数组越界
+        if (resultList == null || resultList.isEmpty()) {
+            log.error("单容器重启无返回结果，容器:{},节点:{}", cleanContainer, cleanNodeIp);
+            throw new ApiException(ResultCodeEnum.SYSTEM_ERROR, "节点请求未返回执行结果，请稍后重试");
         }
-        log.info("节点 {} 容器 {} 重启成功", nodeIp, containerName);
+
+        RestartResult result = resultList.get(0);
+        if (!result.isSuccess()) {
+            String errMsg = result.getMessage();
+            log.error("单容器重启失败，容器:{},节点:{},原因:{}", cleanContainer, cleanNodeIp, errMsg);
+            // 精准匹配枚举，不依赖模糊contains
+            if (MSG_NO_PERMISSION.equals(errMsg)) {
+                throw new ApiException(ResultCodeEnum.NO_PERMISSION_NODE, errMsg);
+            } else if (MSG_NODE_NOT_EXIST.equals(errMsg)) {
+                throw new ApiException(ResultCodeEnum.NO_SUCH_NODE, errMsg);
+            } else if (MSG_CONNECT_TIMEOUT.equals(errMsg)) {
+                throw new ApiException(ResultCodeEnum.GO_AGENT_TIMEOUT, errMsg);
+            } else if (MSG_CONNECT_FAIL.equals(errMsg)) {
+                throw new ApiException(ResultCodeEnum.GO_AGENT_CONNECT_ERROR, errMsg);
+            } else {
+                throw new ApiException(ResultCodeEnum.SYSTEM_ERROR, "容器重启失败：" + errMsg);
+            }
+        }
+
+        long cost = System.currentTimeMillis() - start;
+        log.info("节点 {} 容器 {} 重启成功，耗时{}ms", cleanNodeIp, cleanContainer, cost);
     }
 
-    //==================== 批量重启核心（去重、细分异常、并行聚合）====================
+    //==================== 批量重启核心 ====================
     public BatchRestartContainerResponse batchRestartContainers(BatchRestartContainerRequest request) {
         Long userId = AuthContext.getUserId();
         if (request == null || request.getContainerItems() == null || request.getContainerItems().isEmpty()) {
@@ -207,6 +245,13 @@ public class PodmanService {
         }
 
         List<ContainerRestartItem> allItems = request.getContainerItems();
+        // 统一清洗所有入参，消除单/批量trim不一致
+        allItems.forEach(item -> {
+            item.setContainerName(Optional.ofNullable(item.getContainerName()).map(String::trim).orElse(""));
+            item.setNodeIp(Optional.ofNullable(item.getNodeIp()).map(String::trim).orElse(""));
+        });
+        log.info("批量重启入口，待处理容器总数:{}", allItems.size());
+
         BatchRestartContainerResponse finalResp = new BatchRestartContainerResponse();
         finalResp.setTotal(allItems.size());
         List<RestartResult> totalResultList = new ArrayList<>();
@@ -214,14 +259,7 @@ public class PodmanService {
         // 1. 获取当前用户有权节点
         List<AgentIpPortDTO> userAgents = agentMapper.findAgentsByUserId(userId);
         if (userAgents.isEmpty()) {
-            allItems.forEach(i -> {
-                RestartResult r = new RestartResult();
-                r.setContainerName(i.getContainerName());
-                r.setNodeIp(i.getNodeIp());
-                r.setSuccess(false);
-                r.setMessage("无可用Agent节点");
-                totalResultList.add(r);
-            });
+            allItems.forEach(i -> totalResultList.add(buildFailResult(i.getContainerName(), i.getNodeIp(), MSG_NO_AGENT)));
             finalResp.setResults(totalResultList);
             finalResp.setSuccess(0);
             finalResp.setFail(allItems.size());
@@ -240,16 +278,10 @@ public class PodmanService {
 
             CompletableFuture<List<RestartResult>> future = CompletableFuture.supplyAsync(() -> {
                 List<RestartResult> nodeResultList = new ArrayList<>();
+                log.info("开始处理节点 {} 批量重启，容器数量:{}", nodeIp, nodeItemList.size());
                 // 无权限节点
                 if (!allowIpSet.contains(nodeIp)) {
-                    nodeItemList.forEach(item -> {
-                        RestartResult r = new RestartResult();
-                        r.setContainerName(item.getContainerName());
-                        r.setNodeIp(nodeIp);
-                        r.setSuccess(false);
-                        r.setMessage("无访问该节点权限");
-                        nodeResultList.add(r);
-                    });
+                    nodeItemList.forEach(item -> nodeResultList.add(buildFailResult(item.getContainerName(), item.getNodeIp(), MSG_NO_PERMISSION)));
                     return nodeResultList;
                 }
 
@@ -257,14 +289,7 @@ public class PodmanService {
                         .filter(a -> nodeIp.equals(a.getIp()))
                         .findFirst().orElse(null);
                 if (targetAgent == null) {
-                    nodeItemList.forEach(item -> {
-                        RestartResult r = new RestartResult();
-                        r.setContainerName(item.getContainerName());
-                        r.setNodeIp(nodeIp);
-                        r.setSuccess(false);
-                        r.setMessage("节点不存在");
-                        nodeResultList.add(r);
-                    });
+                    nodeItemList.forEach(item -> nodeResultList.add(buildFailResult(item.getContainerName(), item.getNodeIp(), MSG_NODE_NOT_EXIST)));
                     return nodeResultList;
                 }
 
@@ -292,41 +317,21 @@ public class PodmanService {
                     Throwable root = e.getMostSpecificCause();
                     if (root instanceof java.net.SocketTimeoutException) {
                         log.error("节点 {} 请求超时", nodeIp, e);
-                        msg = "请求节点超时";
+                        msg = MSG_CONNECT_TIMEOUT;
                     } else {
                         log.error("节点 {} 连接失败", nodeIp, e);
-                        msg = "连接节点失败";
+                        msg = MSG_CONNECT_FAIL;
                     }
-                    nodeItemList.forEach(item -> {
-                        RestartResult r = new RestartResult();
-                        r.setContainerName(item.getContainerName());
-                        r.setNodeIp(nodeIp);
-                        r.setSuccess(false);
-                        r.setMessage(msg);
-                        nodeResultList.add(r);
-                    });
+                    nodeItemList.forEach(item -> nodeResultList.add(buildFailResult(item.getContainerName(), item.getNodeIp(), msg)));
                     return nodeResultList;
                 } catch (ApiException e) {
                     log.error("节点 {} 批量请求业务异常 code:{}", nodeIp, e.getCode(), e);
-                    nodeItemList.forEach(item -> {
-                        RestartResult r = new RestartResult();
-                        r.setContainerName(item.getContainerName());
-                        r.setNodeIp(nodeIp);
-                        r.setSuccess(false);
-                        r.setMessage("节点操作异常[" + e.getCode() + "]：" + e.getMessage());
-                        nodeResultList.add(r);
-                    });
+                    String errMsg = "节点操作异常[" + e.getCode() + "]：" + e.getMessage();
+                    nodeItemList.forEach(item -> nodeResultList.add(buildFailResult(item.getContainerName(), item.getNodeIp(), errMsg)));
                     return nodeResultList;
                 } catch (Exception e) {
                     log.error("节点 {} 批量重启未知异常", nodeIp, e);
-                    nodeItemList.forEach(item -> {
-                        RestartResult r = new RestartResult();
-                        r.setContainerName(item.getContainerName());
-                        r.setNodeIp(nodeIp);
-                        r.setSuccess(false);
-                        r.setMessage("未知异常：" + e.getMessage());
-                        nodeResultList.add(r);
-                    });
+                    nodeItemList.forEach(item -> nodeResultList.add(buildFailResult(item.getContainerName(), item.getNodeIp(), MSG_UNKNOWN_ERROR + "：" + e.getMessage())));
                     return nodeResultList;
                 }
 
@@ -341,7 +346,7 @@ public class PodmanService {
                         r.setMessage(agentRes.getMsg());
                     } else {
                         r.setSuccess(false);
-                        r.setMessage("无执行结果");
+                        r.setMessage(MSG_NO_RESULT);
                     }
                     nodeResultList.add(r);
                 }
@@ -369,6 +374,19 @@ public class PodmanService {
         finalResp.setResults(totalResultList);
         finalResp.setSuccess((int) successCount);
         finalResp.setFail(allItems.size() - (int) successCount);
+        log.info("批量重启全部节点处理完毕，总成功{}，总失败{}", successCount, finalResp.getFail());
         return finalResp;
+    }
+
+    /**
+     * 公共工具：快速构造失败返回结果，消除重复new样板代码
+     */
+    private RestartResult buildFailResult(String containerName, String nodeIp, String msg) {
+        RestartResult r = new RestartResult();
+        r.setContainerName(containerName);
+        r.setNodeIp(nodeIp);
+        r.setSuccess(false);
+        r.setMessage(msg);
+        return r;
     }
 }
