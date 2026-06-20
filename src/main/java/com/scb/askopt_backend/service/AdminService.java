@@ -8,7 +8,7 @@ import com.scb.askopt_backend.config.RedisUtil;
 import com.scb.askopt_backend.dto.AddRoleDTO;
 import com.scb.askopt_backend.dto.admin.*;
 import com.scb.askopt_backend.entity.*;
-import com.scb.askopt_backend.exception.ApiException;
+import com.scb.askopt_backend.exception.GlobalExceptionHandler.ApiException;
 import com.scb.askopt_backend.exception.ResultCodeEnum;
 import com.scb.askopt_backend.mapper.*;
 import com.scb.askopt_backend.vo.*;
@@ -329,10 +329,12 @@ public class AdminService extends ServiceImpl<UserMapper, SysUser> {
     public void deleteRoleById(Long roleId) {
         SysRole role = roleMapper.selectById(roleId);
         if (role == null) {
-            throw new ApiException(ResultCodeEnum.Role_NOTEXIST.getCode(), ResultCodeEnum.Role_NOTEXIST.getMessage());
+            // 改动1：使用枚举构造
+            throw new ApiException(ResultCodeEnum.Role_NOTEXIST);
         }
         if ("admin".equals(role.getRoleCode())) {
-            throw new ApiException(ResultCodeEnum.NOT_ALLOW_CHANGE_ADMIN_STATUS.getCode(), ResultCodeEnum.NOT_ALLOW_CHANGE_ADMIN_STATUS.getMessage());
+            // 改动2：使用枚举构造
+            throw new ApiException(ResultCodeEnum.NOT_ALLOW_CHANGE_ADMIN_STATUS);
         }
 
         // 先刷新再删除
@@ -402,7 +404,8 @@ public class AdminService extends ServiceImpl<UserMapper, SysUser> {
                         .eq(SysRole::getRoleCode, dto.getRoleCode())
         );
         if (countCode > 0) {
-            throw new ApiException(ResultCodeEnum.VALUE_ALREADY_EXIST.getCode(), ResultCodeEnum.VALUE_ALREADY_EXIST.getMessage());
+            // 改动3：使用枚举构造
+            throw new ApiException(ResultCodeEnum.VALUE_ALREADY_EXIST);
         }
 
         Long countName = roleMapper.selectCount(
@@ -410,7 +413,8 @@ public class AdminService extends ServiceImpl<UserMapper, SysUser> {
                         .eq(SysRole::getRoleName, dto.getRoleName())
         );
         if (countName > 0) {
-            throw new ApiException(ResultCodeEnum.VALUE_ALREADY_EXIST.getCode(), ResultCodeEnum.VALUE_ALREADY_EXIST.getMessage());
+            // 改动4：使用枚举构造
+            throw new ApiException(ResultCodeEnum.VALUE_ALREADY_EXIST);
         }
 
         SysRole role = new SysRole();

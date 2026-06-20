@@ -1,28 +1,29 @@
 package com.scb.askopt_backend.config;
 
+import com.scb.askopt_backend.util.MdcTaskDecorator;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 
-import java.util.concurrent.*;
-import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.Executor;
+import java.util.concurrent.ThreadPoolExecutor;
 
 @Configuration
 public class ExecutorConfig {
 
     @Bean("containerExecutor")
     public Executor containerExecutor() {
-        AtomicInteger threadCounter = new AtomicInteger(1);
-        return new ThreadPoolExecutor(
-                16,                  // 核心
-                40,                  // 最大
-                60L, TimeUnit.SECONDS,
-                new ArrayBlockingQueue<>(200),  // 排队缓冲，避免瞬间创建线程
-                r -> {
-                    Thread thread = new Thread(r);
-                    thread.setName("container-task-" + threadCounter.getAndIncrement());
-                    return thread;
-                },
-                new ThreadPoolExecutor.CallerRunsPolicy()
-        );
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        // 原有参数完全对齐
+        executor.setCorePoolSize(16);
+        executor.setMaxPoolSize(40);
+        executor.setQueueCapacity(200);
+        executor.setKeepAliveSeconds(60);
+        executor.setThreadNamePrefix("container-task-");
+        // 关键：MDC 上下文传递装饰器
+        executor.setTaskDecorator(new MdcTaskDecorator());
+        executor.setRejectedExecutionHandler(new ThreadPoolExecutor.CallerRunsPolicy());
+        executor.initialize();
+        return executor;
     }
 }

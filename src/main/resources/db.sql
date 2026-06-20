@@ -270,3 +270,15 @@ CREATE TABLE sys_audit_log (
 CREATE INDEX idx_sys_audit_log_trace_id ON sys_audit_log (trace_id);
 CREATE INDEX idx_sys_audit_log_user_id ON sys_audit_log (user_id);
 CREATE INDEX idx_sys_audit_log_create_time ON sys_audit_log (create_time);
+
+-- 查看容器列表
+INSERT INTO askops_schema.sys_permission (permission_code, permission_name, parent_id, type, url_pattern, http_method, path, component, icon, sort, visible, description, created_at)
+VALUES ('container:list', '查看容器权限', 3, 'api', '/api/containers/containers**', 'GET', '', '', '', 0, true, '查看容器权限', NOW());
+
+-- 容器重启/批量重启
+INSERT INTO askops_schema.sys_permission (permission_code, permission_name, parent_id, type, url_pattern, http_method, path, component, icon, sort, visible, description, created_at)
+VALUES ('container:restart', '重启容器权限', 3, 'api', '/api/containers/restart(-batch)?$', 'POST', '', '', '', 0, true, '重启容器权限', NOW());
+
+-- 查看节点列表
+INSERT INTO askops_schema.sys_permission (permission_code, permission_name, parent_id, type, url_pattern, http_method, path, component, icon, sort, visible, description, created_at)
+VALUES ('node:list', '查看node列表权限', 3, 'api', '/api/agent/nodes', 'GET', '', '', '', 0, true, '查看node列表权限', NOW());

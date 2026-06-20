@@ -52,15 +52,23 @@ public class GlobalExceptionHandler {
     public static class ApiException extends RuntimeException {
         private final int code;
 
+        // 1. 纯枚举默认文案（原有）
         public ApiException(ResultCodeEnum codeEnum) {
             super(codeEnum.getMessage());
             this.code = codeEnum.getCode();
         }
 
-        // 兼容你之前手动传 code + message
-        public ApiException(int code, String message) {
+        // 2. 自定义消息 + 错误码（扩展）
+        public ApiException(ResultCodeEnum codeEnum, String message) {
             super(message);
-            this.code = code;
+            this.code = codeEnum.getCode();
         }
+
+        // 3. 携带原始异常堆栈（核心：用于日志溯源）
+        public ApiException(ResultCodeEnum codeEnum, Throwable cause) {
+            super(codeEnum.getMessage(), cause);
+            this.code = codeEnum.getCode();
+        }
+
     }
 }

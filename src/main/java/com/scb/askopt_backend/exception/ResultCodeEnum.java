@@ -22,7 +22,15 @@ public enum ResultCodeEnum {
     Role_NOTEXIST(100006, "角色不存在"),
     PERMISSION_NOTEXIST(100007, "权限不存在"),
     USER_ALREADY_EXIST(100008, "用户已存在"),
-    VALUE_ALREADY_EXIST(100009, "值已存在");
+    VALUE_ALREADY_EXIST(100009, "值已存在"),
+    // ===================== GoAgent & HMAC 相关 =====================
+    GO_AGENT_SERIALIZE_ERROR(100010, "请求参数序列化失败"),
+    GO_AGENT_SIGN_ERROR(100011, "接口签名生成失败"),
+    GO_AGENT_CONNECT_ERROR(100012, "连接代理节点失败"),
+    GO_AGENT_TIMEOUT(100013, "请求代理节点超时"),
+    GO_AGENT_RESPONSE_ERROR(100014, "代理节点返回异常数据"),
+    GO_AGENT_CLIENT_ID_INVALID(100015, "客户端身份标识无效");
+
     private final int code;
     private final String message;
 }

@@ -1,5 +1,8 @@
 package com.scb.askopt_backend.config.Hmac;
 
+import com.scb.askopt_backend.exception.GlobalExceptionHandler.ApiException;
+import com.scb.askopt_backend.exception.ResultCodeEnum;
+
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.StandardCharsets;
@@ -19,7 +22,7 @@ public final class HmacSigner {
                     mac.doFinal(payload.getBytes(StandardCharsets.UTF_8))
             );
         } catch (Exception e) {
-            throw new RuntimeException("HMAC sign failed", e);
+            throw new ApiException(ResultCodeEnum.GO_AGENT_SIGN_ERROR, e);
         }
     }
 }

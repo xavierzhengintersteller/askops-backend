@@ -42,7 +42,7 @@ public class PodmanController {
 
     // 批量重启
     @AuditLog(module = "CONTAINER", operation = AuditConstant.UPDATE)
-    @PostMapping("/batch-restart")
+    @PostMapping("/restart-batch")
     public BatchRestartContainerResponse batchRestart(@RequestBody BatchRestartContainerRequest request) {
         BatchRestartContainerResponse resp = podmanService.batchRestartContainers(request);
 
