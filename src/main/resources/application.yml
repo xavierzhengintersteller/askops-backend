@@ -20,7 +20,7 @@ mybatis-plus:
   type-aliases-package: com.scb.askopt_backend.entity  # 统一实体类路径
   configuration:
     map-underscore-to-camel-case: true
-    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl  # 生产环境建议移除或改为日志框架
+#    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl  # 生产环境建议移除或改为日志框架
 logging:
   pattern:
     console: "%d{yyyy-MM-dd HH:mm:ss} [%X{traceId}] [%thread] %-5level %logger{36} - %msg%n"

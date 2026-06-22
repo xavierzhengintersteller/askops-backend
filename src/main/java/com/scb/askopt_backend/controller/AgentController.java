@@ -24,39 +24,21 @@ public class AgentController {
     @Autowired
     private AgentMapper agentMapper;
     /**
-     * Agent 心跳接口
-     * Get /api/agent/health
-     * 只查数据库，不做网络请求
+     * Go Agent启动注册接口
      */
-    @GetMapping("/health")
-    public ApiResponse<AgentHealthResponse> heartbeat() {
-        AgentHealthResponse success = agentService.getHeartbeat();
-        return ApiResponse.success(success);
+    @PostMapping("/register")
+    public ApiResponse<String> register(@Valid @RequestBody AgentRegisterDTO dto) {
+        String msg = agentService.register(dto);
+        return ApiResponse.success(msg);
     }
+
     /**
-     * Agent 注册接口
-     * Post /api/agent/register
-     * 请求体：AgentRegisterRequest
-     * 响应体：AgentRegisterResponse
+     * Go Agent定时心跳上报
      */
-    @PostMapping("register")
-    public ApiResponse<AgentRegisterResponse> register(@Valid @RequestBody AgentRegisterRequest request) {
-        AgentRegisterResponse registerResponse  = agentService.register(request);
-        return ApiResponse.success(registerResponse );
+    @PostMapping("/heartbeat")
+    public ApiResponse<String> heartbeat(@RequestBody AgentHeartbeatDTO dto) {
+        String msg = agentService.heartbeat(dto);
+        return ApiResponse.success(msg);
     }
-    @GetMapping("/nodes")
-    public ApiResponse<List<AgentIpPortDTO>> getCurrentUserNodes() {
-        Long userId = AuthContext.getUserId();
-        List<AgentIpPortDTO> list = agentMapper.findAgentsByUserId(userId);
 
-        // 👇 这里加判断：空列表 → 返回 100001 错误码
-        if (list == null || list.isEmpty()) {
-            return ApiResponse.error(
-                    ResultCodeEnum.NO_AGENT.getCode(),
-                    ResultCodeEnum.NO_AGENT.getMessage()
-            );
-        }
-
-        return ApiResponse.success(list);
-    }
 }

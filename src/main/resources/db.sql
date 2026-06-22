@@ -282,3 +282,55 @@ VALUES ('container:restart', '重启容器权限', 3, 'api', '/api/containers/re
 -- 查看节点列表
 INSERT INTO askops_schema.sys_permission (permission_code, permission_name, parent_id, type, url_pattern, http_method, path, component, icon, sort, visible, description, created_at)
 VALUES ('node:list', '查看node列表权限', 3, 'api', '/api/agent/nodes', 'GET', '', '', '', 0, true, '查看node列表权限', NOW());
+
+==new agent table
+-- 1. 创建表
+CREATE TABLE t_agent (
+    id BIGSERIAL PRIMARY KEY,
+    name VARCHAR(64) NOT NULL,
+    ip VARCHAR(32) NOT NULL,
+    port INT NOT NULL,
+    group_id BIGINT NULL,
+    status VARCHAR(16) NOT NULL DEFAULT 'REGISTERING',
+    last_heartbeat_time TIMESTAMP NULL,
+    failcount INT NOT NULL DEFAULT 0,
+    heartbeat_timeout_sec INT NOT NULL DEFAULT 30,
+    client_id VARCHAR(64) NOT NULL,
+    create_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 2. 唯一索引
+CREATE UNIQUE INDEX uk_agent_name ON t_agent(name);
+CREATE UNIQUE INDEX uk_client_id ON t_agent(client_id);
+
+-- 3. 自动更新 update_time 触发器函数
+CREATE OR REPLACE FUNCTION update_modified_column()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.update_time = CURRENT_TIMESTAMP;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trigger_t_agent_update
+BEFORE UPDATE ON t_agent
+FOR EACH ROW EXECUTE FUNCTION update_modified_column();
+
+-- 4. 表注释
+COMMENT ON TABLE t_agent IS 'Agent服务器注册表';
+
+-- 5. 字段注释
+COMMENT ON COLUMN t_agent.id IS '主键ID';
+COMMENT ON COLUMN t_agent.name IS 'Agent唯一名称';
+COMMENT ON COLUMN t_agent.ip IS 'Agent宿主机IP';
+COMMENT ON COLUMN t_agent.port IS 'Agent服务端口';
+COMMENT ON COLUMN t_agent.group_id IS '所属分组ID';
+COMMENT ON COLUMN t_agent.status IS '状态 ONLINE/OFFLINE/REGISTERING';
+COMMENT ON COLUMN t_agent.last_heartbeat_time IS '最后心跳时间';
+COMMENT ON COLUMN t_agent.failcount IS '连续失败次数';
+COMMENT ON COLUMN t_agent.heartbeat_timeout_sec IS '心跳超时阈值(秒)';
+COMMENT ON COLUMN t_agent.client_id IS 'Agent对应HMAC clientId';
+COMMENT ON COLUMN t_agent.create_time IS '创建时间';
+COMMENT ON COLUMN t_agent.update_time IS '更新时间';
+==

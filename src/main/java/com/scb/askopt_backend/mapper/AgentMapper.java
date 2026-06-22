@@ -5,14 +5,15 @@ import com.scb.askopt_backend.dto.AgentIpPortDTO;
 import com.scb.askopt_backend.entity.Agent;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Mapper;
+import org.apache.ibatis.annotations.Update;
 
 import java.time.LocalDateTime;
 import java.util.List;
 
 /**
- * Agent 数据访问层（纯 MyBatis 实现）
+ * Agent 数据访问层（适配PostgreSQL）
  */
-
+@Mapper
 public interface AgentMapper extends BaseMapper<Agent> {
     /**
      * find ip,port by userId
@@ -21,41 +22,15 @@ public interface AgentMapper extends BaseMapper<Agent> {
      */
     List<AgentIpPortDTO> findAgentsByUserId(Long userId);
 
-    /**
-     * 查询所有 agent
-     */
-    List<Agent> findAllAgents();
+    // 更新心跳时间+重置失败次数
+    @Update("UPDATE t_agent SET last_heartbeat_time=#{now}, failcount=0, status='ONLINE', update_time=#{now} WHERE name=#{name}")
+    int updateHeartbeat(@Param("name") String name, @Param("now") LocalDateTime now);
 
+    // 扫描超时Agent标记离线，失败次数+1
+    // PostgreSQL 替换MySQL TIMESTAMPDIFF，使用EXTRACT(EPOCH FROM 时间间隔) 获取总秒数
+    @Update("UPDATE t_agent SET status='OFFLINE', failcount=failcount+1, update_time=#{now} " +
+            "WHERE EXTRACT(EPOCH FROM (#{now} - last_heartbeat_time)) > heartbeat_timeout_sec AND status='ONLINE'")
+    int markOfflineTimeoutAgent(@Param("now") LocalDateTime now);
 
-    /**
-     * 更新 agent 状态
-     */
-    void updateStatus(@Param("id") Long id,
-                      @Param("status") String status,
-                      @Param("failCount") Integer failCount);
-
-
-    /**
-     * 插入Agent数据（自动生成主键ID）
-     * @param agent 待插入的Agent对象
-     */
-    void insertAgent(Agent agent);
-
-    // 原子递增失败次数
-    void incrementFailCount(@Param("agentId") Long agentId);
-
-    // 关键修复：查询单条Agent的失败次数
-    Integer getFailCountById(@Param("agentId") Long agentId);
-
-    // 批量更新状态、失败次数、心跳时间（合并操作，减少数据库交互）
-    void updateAgentStatusAndFailCount(
-            @Param("agentId") Long agentId,
-            @Param("status") String status,
-            @Param("failCount") Integer failCount,
-            @Param("heartbeatTime") LocalDateTime heartbeatTime);
-
-    // 仅更新心跳时间
-    void updateHeartbeatTime(
-            @Param("agentId") Long agentId,
-            @Param("heartbeatTime") LocalDateTime heartbeatTime);
+    List<Agent> selectOnlineAgent();
 }

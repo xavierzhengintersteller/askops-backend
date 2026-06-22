@@ -3,10 +3,13 @@ package com.scb.askopt_backend.controller;
 import com.scb.askopt_backend.annotation.AuditLog;
 import com.scb.askopt_backend.constant.AuditConstant;
 import com.scb.askopt_backend.context.AuditStatusContext;
+import com.scb.askopt_backend.context.AuthContext;
 import com.scb.askopt_backend.dto.*;
 import com.scb.askopt_backend.dto.RestartContainer.BatchRestartContainerRequest;
 import com.scb.askopt_backend.dto.RestartContainer.BatchRestartContainerResponse;
 import com.scb.askopt_backend.dto.RestartContainer.ContainerRestartItem;
+import com.scb.askopt_backend.exception.ResultCodeEnum;
+import com.scb.askopt_backend.mapper.AgentMapper;
 import com.scb.askopt_backend.service.PodmanService;
 import com.scb.askopt_backend.vo.ApiResponse;
 import lombok.extern.slf4j.Slf4j;
@@ -22,6 +25,8 @@ public class PodmanController {
 
     @Autowired
     private PodmanService podmanService;
+    @Autowired
+    private AgentMapper agentMapper;
 
     // 重启容器
     @AuditLog(module = "CONTAINER", operation = AuditConstant.UPDATE)
@@ -72,5 +77,20 @@ public class PodmanController {
         List<ContainerInfoDTO> containers = podmanService.getContainers(nodeIps, manual);
         log.info("【查询容器列表】返回容器数量：{}", containers.size());
         return ApiResponse.success(containers);
+    }
+    @GetMapping("/nodes")
+    public ApiResponse<List<AgentIpPortDTO>> getCurrentUserNodes() {
+        Long userId = AuthContext.getUserId();
+        List<AgentIpPortDTO> list = agentMapper.findAgentsByUserId(userId);
+
+        // 👇 这里加判断：空列表 → 返回 100001 错误码
+        if (list == null || list.isEmpty()) {
+            return ApiResponse.error(
+                    ResultCodeEnum.NO_AGENT.getCode(),
+                    ResultCodeEnum.NO_AGENT.getMessage()
+            );
+        }
+
+        return ApiResponse.success(list);
     }
 }

@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.scb.askopt_backend.exception.GlobalExceptionHandler.ApiException;
 import com.scb.askopt_backend.exception.ResultCodeEnum;
 import lombok.RequiredArgsConstructor;
+import org.slf4j.MDC;
 import org.springframework.http.*;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestTemplate;
@@ -47,7 +48,6 @@ public class GoAgentClient {
     public <T, R> T post(String url, R requestBody, Class<T> responseType) {
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
-
         String path = getUriPath(url);
         String bodyStr = toJson(requestBody);
         hmacRequestSigner.sign(HttpMethod.POST, path, bodyStr, headers);
