@@ -334,3 +334,18 @@ COMMENT ON COLUMN t_agent.client_id IS 'Agent对应HMAC clientId';
 COMMENT ON COLUMN t_agent.create_time IS '创建时间';
 COMMENT ON COLUMN t_agent.update_time IS '更新时间';
 ==
+CREATE TABLE container_info (
+    id BIGSERIAL PRIMARY KEY,
+    node_ip VARCHAR(64) NOT NULL,
+    container_id VARCHAR(128) NOT NULL,
+    container_name VARCHAR(256) NOT NULL,
+    image VARCHAR(512) NOT NULL,
+    state VARCHAR(32) NOT NULL,
+    status VARCHAR(256) NOT NULL,
+    created_at TIMESTAMP NOT NULL,
+    last_seen_time TIMESTAMP NOT NULL,
+    is_deleted BOOLEAN DEFAULT false NOT NULL,
+    ports_json JSONB,
+    extra_json JSONB,
+    UNIQUE (node_ip, container_id)
+);

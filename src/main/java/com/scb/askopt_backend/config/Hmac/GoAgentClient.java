@@ -6,6 +6,7 @@ import com.scb.askopt_backend.exception.GlobalExceptionHandler.ApiException;
 import com.scb.askopt_backend.exception.ResultCodeEnum;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.MDC;
+import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.*;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestTemplate;
@@ -23,7 +24,7 @@ public class GoAgentClient {
     private final ObjectMapper objectMapper;
 
     /**
-     * 通用GET请求
+     * 通用GET请求（普通Class返回）
      * @param url 完整请求地址
      * @param responseType 响应实体类型
      * @return 响应结果
@@ -39,7 +40,16 @@ public class GoAgentClient {
     }
 
     /**
-     * 通用POST请求
+     * 通用GET请求（泛型集合 List/Map 专用）
+     */
+    public <T> T get(String url, ParameterizedTypeReference<T> typeRef) {
+        HttpEntity<Void> requestEntity = buildHmacHeaderEntity(HttpMethod.GET, url, null);
+        ResponseEntity<T> response = restTemplate.exchange(url, HttpMethod.GET, requestEntity, typeRef);
+        return response.getBody();
+    }
+
+    /**
+     * 通用POST请求（普通Class返回）
      * @param url 完整请求地址
      * @param requestBody 请求体
      * @param responseType 响应实体类型
@@ -54,6 +64,21 @@ public class GoAgentClient {
 
         HttpEntity<R> entity = new HttpEntity<>(requestBody, headers);
         ResponseEntity<T> response = restTemplate.exchange(url, HttpMethod.POST, entity, responseType);
+        return response.getBody();
+    }
+
+    /**
+     * 通用POST请求（泛型集合返回专用，预留扩展）
+     */
+    public <T, R> T post(String url, R requestBody, ParameterizedTypeReference<T> typeRef) {
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        String path = getUriPath(url);
+        String bodyStr = toJson(requestBody);
+        hmacRequestSigner.sign(HttpMethod.POST, path, bodyStr, headers);
+
+        HttpEntity<R> entity = new HttpEntity<>(requestBody, headers);
+        ResponseEntity<T> response = restTemplate.exchange(url, HttpMethod.POST, entity, typeRef);
         return response.getBody();
     }
 
@@ -84,6 +109,18 @@ public class GoAgentClient {
         HttpEntity<Void> entity = new HttpEntity<>(headers);
         ResponseEntity<T> response = restTemplate.exchange(url, HttpMethod.DELETE, entity, responseType);
         return response.getBody();
+    }
+
+    //==================== 私有工具方法 ====================
+    /**
+     * 构建带HMAC签名的空Body请求Entity（GET/DELETE无请求体接口复用）
+     */
+    private HttpEntity<Void> buildHmacHeaderEntity(HttpMethod method, String url, String bodyJson) {
+        HttpHeaders headers = new HttpHeaders();
+        String path = getUriPath(url);
+        String body = bodyJson == null ? "" : bodyJson;
+        hmacRequestSigner.sign(method, path, body, headers);
+        return new HttpEntity<>(headers);
     }
 
     /**

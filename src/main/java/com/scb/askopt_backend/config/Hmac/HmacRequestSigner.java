@@ -1,7 +1,9 @@
 package com.scb.askopt_backend.config.Hmac;
 
+import com.scb.askopt_backend.security.TraceFilter;
 import lombok.RequiredArgsConstructor;
 import org.apache.commons.codec.digest.DigestUtils;
+import org.slf4j.MDC;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.stereotype.Component;
@@ -45,5 +47,7 @@ public class HmacRequestSigner {
         headers.set("X-Client-Id", clientId);
         headers.set("X-Timestamp", timestamp);
         headers.set("X-Signature", signature);
+        String traceId = MDC.get(TraceFilter.MDC_TRACE_KEY);
+        headers.set(TraceFilter.TRACE_ID_HEADER, traceId);
     }
 }

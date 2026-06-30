@@ -8,5 +8,5 @@ import java.util.List;
  */
 @Data
 public class AgentBatchRestartReq {
-    private List<String> containerNames;
+    private List<String> ContainerIds;
 }

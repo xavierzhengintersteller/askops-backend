@@ -8,10 +8,17 @@ import com.scb.askopt_backend.dto.*;
 import com.scb.askopt_backend.dto.RestartContainer.BatchRestartContainerRequest;
 import com.scb.askopt_backend.dto.RestartContainer.BatchRestartContainerResponse;
 import com.scb.askopt_backend.dto.RestartContainer.ContainerRestartItem;
+import com.scb.askopt_backend.dto.common.PageQueryDTO;
+import com.scb.askopt_backend.dto.common.PageResultDTO;
+import com.scb.askopt_backend.dto.podman.ContainerDetailDTO;
+import com.scb.askopt_backend.dto.podman.ContainerInfoDTO;
+import com.scb.askopt_backend.dto.podman.ContainerQueryDTO;
 import com.scb.askopt_backend.exception.ResultCodeEnum;
 import com.scb.askopt_backend.mapper.AgentMapper;
 import com.scb.askopt_backend.service.PodmanService;
 import com.scb.askopt_backend.vo.ApiResponse;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.Min;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
@@ -31,11 +38,11 @@ public class PodmanController {
     // 重启容器
     @AuditLog(module = "CONTAINER", operation = AuditConstant.UPDATE)
     @PostMapping("/restart")
-    public ApiResponse<String> restartContainer(@RequestBody ContainerRestartItem request) {
+    public ApiResponse<String> restartContainer(@Valid @RequestBody ContainerRestartItem request) {
         log.info("【单容器重启接口】入参：{}", request);
         try {
-            podmanService.restart(request.getContainerName(), request.getNodeIp());
-            String successMsg = "Container " + request.getContainerName() + " restarted on node " + request.getNodeIp();
+            podmanService.restart(request.getContainerId(), request.getNodeIp());
+            String successMsg = "Container " + request.getContainerId() + " restarted on node " + request.getNodeIp();
             log.info("【单容器重启接口】执行成功，返回：{}", successMsg);
             return ApiResponse.success(successMsg);
         } catch (Exception e) {
@@ -67,17 +74,20 @@ public class PodmanController {
         return resp;
     }
 
-    // 获取容器列表
+
+    /**
+     * 分页查询容器列表
+     */
     @GetMapping("/containers")
-    public ApiResponse<List<ContainerInfoDTO>> getContainers(
-            @RequestParam(required = false) List<String> nodeIps,
-            @RequestParam(defaultValue = "false") boolean manual
+    public ApiResponse<PageResultDTO<ContainerInfoDTO>> getContainers(
+            @ModelAttribute ContainerQueryDTO dto
     ) {
-        log.info("【查询容器列表】nodeIps:{},手动刷新:{}", nodeIps, manual);
-        List<ContainerInfoDTO> containers = podmanService.getContainers(nodeIps, manual);
-        log.info("【查询容器列表】返回容器数量：{}", containers.size());
-        return ApiResponse.success(containers);
+        log.info("查询容器列表｜query={}", dto);
+        PageResultDTO<ContainerInfoDTO> pageData = podmanService.getContainers(dto);
+        log.info("容器查询完成｜总条数:{}, 当前页返回:{}", pageData.getTotal(), pageData.getRecords().size());
+        return ApiResponse.success(pageData);
     }
+
     @GetMapping("/nodes")
     public ApiResponse<List<AgentIpPortDTO>> getCurrentUserNodes() {
         Long userId = AuthContext.getUserId();
@@ -92,5 +102,13 @@ public class PodmanController {
         }
 
         return ApiResponse.success(list);
+    }
+    @GetMapping("/container/detail")
+    public ApiResponse<ContainerDetailDTO> getContainerDetail(
+            @RequestParam String nodeIp,
+            @RequestParam String containerId
+    ) {
+        ContainerDetailDTO detail = podmanService.getContainerDetail(nodeIp, containerId);
+        return ApiResponse.success(detail);
     }
 }
