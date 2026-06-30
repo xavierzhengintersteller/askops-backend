@@ -3,17 +3,17 @@
         PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 
-<mapper namespace="com.scb.askopt_backend.mapper.AdminMapper">
+<mapper namespace="com.scb.tb.askopt_backend.mapper.AdminMapper">
 
     <!-- 定义结果映射：处理用户+角色一对多关系 -->
-    <resultMap id="UserWithRolesResultMap" type="com.scb.askopt_backend.vo.UserWithRolesVO">
+    <resultMap id="UserWithRolesResultMap" type="com.scb.tb.askopt_backend.vo.UserWithRolesVO">
         <!-- 用户基础字段映射 -->
         <id column="user_id" property="userId"/>
         <result column="username" property="username"/>
         <result column="enabled" property="enabled"/>
 
         <!-- 一对多映射：角色列表 -->
-        <collection property="roles" ofType="com.scb.askopt_backend.vo.UserWithRolesVO$RoleVO">
+        <collection property="roles" ofType="com.scb.tb.askopt_backend.vo.UserWithRolesVO$RoleVO">
             <id column="role_id" property="roleId"/>
             <result column="role_name" property="roleName"/>
         </collection>

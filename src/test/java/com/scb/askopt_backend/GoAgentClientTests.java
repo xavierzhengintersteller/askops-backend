@@ -1,6 +1,6 @@
 package com.scb.askopt_backend;
 
-import com.scb.askopt_backend.config.Hmac.GoAgentClient;
+import com.scb.tb.askopt_backend.config.Hmac.GoAgentClient;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.slf4j.MDC;

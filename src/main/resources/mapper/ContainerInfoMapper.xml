@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.scb.tb.askopt_backend.mapper.ContainerInfoMapper">
+    <insert id="batchInsert">
+        INSERT INTO container_info (
+        node_ip, container_id, container_name, image, state, status,
+        created_at, last_seen_time, ports_json, extra_json, is_deleted
+        ) VALUES
+        <foreach collection="list" item="item" separator=",">
+            (
+            #{item.nodeIp},
+            #{item.containerId},
+            #{item.containerName},
+            #{item.image},
+            #{item.state},
+            #{item.status},
+            #{item.createdAt},
+            #{item.lastSeenTime},
+            #{item.portsJson, typeHandler=com.baomidou.mybatisplus.extension.handlers.JacksonTypeHandler}::jsonb,
+            #{item.extraJson, typeHandler=com.baomidou.mybatisplus.extension.handlers.JacksonTypeHandler}::jsonb,
+            #{item.isDeleted}
+            )
+        </foreach>
+        ON CONFLICT (node_ip, container_id) DO UPDATE SET
+        container_name = EXCLUDED.container_name,
+        image = EXCLUDED.image,
+        state = EXCLUDED.state,
+        status = EXCLUDED.status,
+        created_at = EXCLUDED.created_at,
+        last_seen_time = EXCLUDED.last_seen_time,
+        ports_json = EXCLUDED.ports_json,
+        extra_json = EXCLUDED.extra_json,
+        is_deleted = false
+    </insert>
+</mapper>

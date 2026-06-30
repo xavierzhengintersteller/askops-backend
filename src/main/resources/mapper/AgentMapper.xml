@@ -3,9 +3,9 @@
         PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 
-<mapper namespace="com.scb.askopt_backend.mapper.AgentMapper">
+<mapper namespace="com.scb.tb.askopt_backend.mapper.AgentMapper">
 
-    <select id="findAgentsByUserId" resultType="com.scb.askopt_backend.dto.AgentIpPortDTO">
+    <select id="findAgentsByUserId" resultType="com.scb.tb.askopt_backend.dto.AgentIpPortDTO">
         select a.ip, a.port
         from t_agent a
         join t_group g on a.group_id = g.id
@@ -14,7 +14,7 @@
         where ur.user_id = #{userId}
     </select>
 
-    <select id="findAllAgents" resultType="com.scb.askopt_backend.entity.Agent">
+    <select id="findAllAgents" resultType="com.scb.tb.askopt_backend.entity.Agent">
         SELECT id, name, ip, port, status, last_heartbeat_time
         FROM t_agent
     </select>
@@ -22,9 +22,9 @@
     <update id="updateStatus">
         UPDATE t_agent
         SET status = #{status},
-            last_heartbeat_time = now(),
-            update_time = now(),
-            failcount = #{failCount}
+        last_heartbeat_time = now(),
+        update_time = now(),
+        failcount = #{failCount}
         WHERE id = #{id}
     </update>
 

@@ -3,7 +3,7 @@
         PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 
-<mapper namespace="com.scb.askopt_backend.mapper.PermissionMapper">
+<mapper namespace="com.scb.tb.askopt_backend.mapper.PermissionMapper">
 
     <!-- resolve incoming path+method to a single permission_code
          mechanism: convert stored pattern's '*' to SQL '%' and match: #{path} LIKE REPLACE(url_pattern,'*','%')
@@ -12,7 +12,7 @@
         SELECT permission_code
         FROM sys_permission
         WHERE #{path} LIKE REPLACE(url_pattern, '*', '%')
-          AND (http_method = #{method} OR http_method = '*')
+        AND (http_method = #{method} OR http_method = '*')
         ORDER BY CHAR_LENGTH(url_pattern) DESC
         LIMIT 1
     </select>
@@ -27,7 +27,7 @@
         <foreach item="code" collection="roleCodes" open="(" separator="," close=")">
             #{code}
         </foreach>
-          AND p.permission_code = #{permissionCode}
+        AND p.permission_code = #{permissionCode}
     </select>
     <!-- Mapper XML: PermissionMapper.xml -->
     <select id="findCodesByRoleCodes" resultType="java.lang.String" parameterType="java.util.List">
@@ -62,4 +62,3 @@
         <!-- 若你的表结构不同（比如表名、字段名），请替换为实际的关联逻辑 -->
     </select>
 </mapper>
-
